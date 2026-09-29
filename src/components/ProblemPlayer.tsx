@@ -4,8 +4,13 @@
  * ProblemPlayer: the full practice experience around the terminal.
  * Left: step list with marks. Right: terminal. Top: score bar.
  * Session auto-grades after every command; Verify shows per-check detail.
+ *
+ * Practice mode: once the problem is complete, "Practice again" swaps in a
+ * brand-new session (no storage, no cloud push, no embed events) so the
+ * solved round can be replayed purely for fun. Exit practice restores the
+ * completed session from the snapshot taken on entry.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import TerminalView from "./TerminalView";
 import SyncChip, { type SyncState } from "./SyncChip";
@@ -38,6 +43,25 @@ function marksColor(earned: number, max: number): string {
   return "text-term-text";
 }
 
+/** Fresh or restored session for the given problem (used on mount and on exit-practice). */
+function createInitialSession(
+  problem: Problem,
+  storage: StorageLike | undefined,
+  studentId: string | null,
+  initialProgress: SessionProgress | null
+): Session {
+  return initialProgress
+    ? Session.restore(problem, JSON.stringify(initialProgress), { storage, studentId })
+    : new Session(problem, { storage, studentId });
+}
+
+const COMPLETE_BANNER_CLASS =
+  "relative mt-3 animate-slideUp overflow-hidden rounded-lg border border-term-green/50 bg-term-green/10 p-3 text-xs font-medium text-term-green shadow-glow";
+const COMPLETE_SHIMMER_CLASS =
+  "animate-shimmer absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent bg-[length:200%_100%]";
+const PRACTICE_BANNER_CLASS =
+  "relative mt-3 animate-slideUp overflow-hidden rounded-lg border border-term-blue/50 bg-term-blue/10 p-3 text-xs font-medium text-term-blue shadow-glow-blue";
+
 export default function ProblemPlayer({
   problem,
   studentId = null,
@@ -49,29 +73,34 @@ export default function ProblemPlayer({
   syncState = "signed-out",
   onProgressChange,
 }: ProblemPlayerProps) {
-  const session = useMemo(
-    () =>
-      initialProgress
-        ? Session.restore(problem, JSON.stringify(initialProgress), { storage, studentId })
-        : new Session(problem, { storage, studentId }),
-    // initialProgress is only read on mount/reset; identity via problem + key
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [problem, storage, studentId]
+  // Session lives in state so practice mode can swap in a fresh one.
+  // initialProgress is only read on mount/reset; identity via problem + key.
+  const [session, setSession] = useState<Session>(() =>
+    createInitialSession(problem, storage, studentId, initialProgress)
   );
   const [, bump] = useState(0);
   const [grade, setGrade] = useState<GradeResult | null>(null);
   const [showHints, setShowHints] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
+  const [practice, setPractice] = useState(false);
+  const savedBlobRef = useRef<string | null>(null);
+  // Mirrored for the session listener below (stable closure, no re-subscribe).
+  const practiceRef = useRef(false);
+  practiceRef.current = practice;
   const eventRef = useRef(onEvent);
   eventRef.current = onEvent;
   const progressCbRef = useRef(onProgressChange);
   progressCbRef.current = onProgressChange;
 
   // Emit session events (step:completed / problem:completed) to the parent.
+  // During practice both the embed bridge and the cloud push stay silent so
+  // replayed rounds can never overwrite the earned record.
   useEffect(() => {
     const off = session.onChange((event) => {
-      eventRef.current?.(event);
-      progressCbRef.current?.(session.progress());
+      if (!practiceRef.current) {
+        eventRef.current?.(event);
+        progressCbRef.current?.(session.progress());
+      }
       bump((n) => n + 1);
     });
     return off;
@@ -88,6 +117,33 @@ export default function ProblemPlayer({
     setShowHints(false);
     bump((n) => n + 1);
   }, [session]);
+
+  /** Start a fresh replay round on the same page. Saves nothing anywhere. */
+  const enterPractice = useCallback(() => {
+    savedBlobRef.current = JSON.stringify(session.progress());
+    practiceRef.current = true;
+    setPractice(true);
+    setSession(new Session(problem, { studentId })); // no storage: local save untouched
+    setSessionKey((k) => k + 1); // TerminalView re-inits
+    setGrade(null);
+    setShowHints(false);
+  }, [problem, session, studentId]);
+
+  /** Leave practice: restore the completed session snapshot. */
+  const exitPractice = useCallback(() => {
+    practiceRef.current = false;
+    setPractice(false);
+    const blob = savedBlobRef.current;
+    savedBlobRef.current = null;
+    setSession(
+      blob
+        ? Session.restore(problem, blob, { storage, studentId })
+        : createInitialSession(problem, storage, studentId, initialProgress)
+    );
+    setSessionKey((k) => k + 1);
+    setGrade(null);
+    setShowHints(false);
+  }, [problem, storage, studentId, initialProgress]);
 
   // Re-run verify automatically after each command while a verify result is showing.
   useEffect(() => {
@@ -120,7 +176,18 @@ export default function ProblemPlayer({
             </Link>
           )}
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold">{problem.title}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="truncate text-sm font-semibold">{problem.title}</h1>
+              {practice && (
+                <span
+                  className="shrink-0 rounded-full border border-term-blue/50 bg-term-blue/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-term-blue"
+                  data-testid="practice-pill"
+                  title="Practice round — your saved score is safe"
+                >
+                  Practice
+                </span>
+              )}
+            </div>
             <p className="text-xs capitalize tracking-wide text-term-muted">{problem.difficulty} · {problem.steps.length} steps</p>
           </div>
         </div>
@@ -221,10 +288,61 @@ export default function ProblemPlayer({
               );
             })}
           </ol>
-          {done && (
-            <div className="relative mt-3 animate-slideUp overflow-hidden rounded-lg border border-term-green/50 bg-term-green/10 p-3 text-xs font-medium text-term-green shadow-glow" data-testid="complete-banner">
+          {done && !practice && (
+            <div className={COMPLETE_BANNER_CLASS} data-testid="complete-banner">
+              <div aria-hidden className={COMPLETE_SHIMMER_CLASS} />
+              <div className="relative">
+                <span>🎉 Problem complete — {session.earned}/{totalMax} marks!</span>
+                <button
+                  onClick={enterPractice}
+                  className="shine mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-term-green/20 px-3 py-2 text-xs font-bold text-term-green ring-1 ring-term-green/40 transition hover:bg-term-green/30 hover:shadow-glow"
+                  data-testid="practice-btn"
+                  title="Replay this problem in practice mode — your saved score is safe"
+                >
+                  🎯 Practice again
+                </button>
+              </div>
+            </div>
+          )}
+          {practice && !done && (
+            <div className={PRACTICE_BANNER_CLASS} data-testid="practice-banner">
               <div aria-hidden className="animate-shimmer absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent bg-[length:200%_100%]" />
-              <span className="relative">🎉 Problem complete — {session.earned}/{totalMax} marks!</span>
+              <div className="relative">
+                <span>🔁 Practice round — your saved score is safe.</span>
+                <button
+                  onClick={exitPractice}
+                  className="shine mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-term-blue/40 bg-term-blue/10 px-3 py-2 text-xs font-semibold transition hover:bg-term-blue/20"
+                  data-testid="exit-practice-btn"
+                  title="Return to your completed round"
+                >
+                  Exit practice
+                </button>
+              </div>
+            </div>
+          )}
+          {done && practice && (
+            <div className={COMPLETE_BANNER_CLASS} data-testid="complete-banner">
+              <div aria-hidden className={COMPLETE_SHIMMER_CLASS} />
+              <div className="relative">
+                <span>🎉 Problem complete — {session.earned}/{totalMax} marks!</span>
+                <span className="mt-1 block text-[10px] uppercase tracking-wider text-term-green/70">Practice round</span>
+                <button
+                  onClick={enterPractice}
+                  className="shine mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-term-green/20 px-3 py-2 text-xs font-bold text-term-green ring-1 ring-term-green/40 transition hover:bg-term-green/30 hover:shadow-glow"
+                  data-testid="practice-btn"
+                  title="Replay this problem in practice mode — your saved score is safe"
+                >
+                  🎯 Practice again
+                </button>
+                <button
+                  onClick={exitPractice}
+                  className="shine mt-1.5 flex w-full items-center justify-center rounded-lg border border-term-border bg-term-raise/60 px-3 py-1.5 text-xs font-medium text-term-muted transition hover:border-term-blue/60 hover:text-term-blue"
+                  data-testid="exit-practice-btn"
+                  title="Return to your earned round"
+                >
+                  Exit practice
+                </button>
+              </div>
             </div>
           )}
         </aside>
