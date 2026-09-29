@@ -103,6 +103,12 @@ export const commandUsedWithFlagCheck = z.object({
   marks: z.number().nonnegative(),
 });
 
+export const cwdEqualsCheck = z.object({
+  type: z.literal("cwdEquals"),
+  path: z.string(),
+  marks: z.number().nonnegative(),
+});
+
 export const checkSchema = z.discriminatedUnion("type", [
   fileExistsCheck,
   dirExistsCheck,
@@ -117,17 +123,28 @@ export const checkSchema = z.discriminatedUnion("type", [
   outputMatchesCheck,
   commandUsedCheck,
   commandUsedWithFlagCheck,
+  cwdEqualsCheck,
 ]);
 
 export type Check = z.infer<typeof checkSchema>;
 
-export const stepSchema = z.object({
-  id: z.string().min(1),
-  prompt: z.string().min(1),
-  hints: z.array(z.string()).default([]),
-  marks: z.number().nonnegative(),
-  checks: z.array(checkSchema).min(1),
-});
+export const stepSchema = z
+  .object({
+    id: z.string().min(1),
+    prompt: z.string().min(1),
+    hints: z.array(z.string()).default([]),
+    marks: z.number().nonnegative(),
+    checks: z.array(checkSchema).min(1),
+  })
+  .superRefine((step, ctx) => {
+    const checkSum = step.checks.reduce((s, c) => s + c.marks, 0);
+    if (checkSum !== step.marks) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `step '${step.id}': marks (${step.marks}) must equal the sum of check marks (${checkSum})`,
+      });
+    }
+  });
 
 export type Step = z.infer<typeof stepSchema>;
 

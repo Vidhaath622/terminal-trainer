@@ -107,10 +107,17 @@ export function evaluateCheck(check: Check, input: GradeInput): CheckResult {
     }
     case "commandUsed": {
       const used = input.stepCommands.some((cmd) => {
-        const name = cmd.trim().split(/\s+/)[0] ?? "";
-        return check.commands.includes(name);
+        const names = cmd.trim().split(/\s+/);
+        return check.commands.some((want) =>
+          names.some((n) => n === want || n.split("/").pop() === want)
+        );
       });
       return used ? pass(`used one of: ${check.commands.join(", ")}`) : fail(`expected use of: ${check.commands.join(", ")}`);
+    }
+    case "cwdEquals": {
+      return vfs.cwd === check.path
+        ? pass(`working directory is ${check.path}`)
+        : fail(`working directory is ${vfs.cwd}, expected ${check.path}`);
     }
     case "commandUsedWithFlag": {
       const used = input.stepCommands.some((cmd) => {

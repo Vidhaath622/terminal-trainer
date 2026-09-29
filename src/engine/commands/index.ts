@@ -81,6 +81,15 @@ export class Shell {
         return { stdout: "", code: 127, error: `${cmdName}: command not found`, cleared: false };
       }
 
+      const home = this.env.HOME ?? "/";
+      const expandTilde = (a: string): string => {
+        if (a === "~") return home;
+        if (a.startsWith("~/")) return home + a.slice(1);
+        return a;
+      };
+      const argv = stage.args.slice(1).map(expandTilde);
+      const redirectToken = stage.redirect ? expandTilde(stage.redirect.token) : "";
+
       const ctx: ShellContext = {
         vfs: this.vfs,
         history: this.history,
@@ -90,7 +99,7 @@ export class Shell {
         now: this.nowFn,
       };
 
-      const res = impl(ctx, stage.args.slice(1));
+      const res = impl(ctx, argv);
       if (res.error !== null && res.code !== 0) {
         return { stdout: "", code: res.code, error: res.error, cleared: false };
       }
@@ -99,7 +108,7 @@ export class Shell {
 
       if (stage.redirect && isLast) {
         const { type, token } = stage.redirect;
-        const abs = this.vfs.resolve(token);
+        const abs = this.vfs.resolve(redirectToken);
         try {
           if (type === ">") {
             this.vfs.writeFile(abs, stdout);

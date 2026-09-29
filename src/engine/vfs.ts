@@ -60,7 +60,11 @@ export class Vfs {
       for (const d of spec.dirs) this.ensureDir(d);
     }
     if (spec?.files) {
-      for (const f of spec.files) this.writeFile(f.path, f.content);
+      for (const f of spec.files) {
+        const parent = this.parentOf(this.resolve(f.path));
+        if (!this.exists(parent)) this.ensureDir(parent);
+        this.writeFile(f.path, f.content);
+      }
     }
   }
 

@@ -5,12 +5,13 @@ import { problemSchema, stepSchema, problemSetSchema } from "./schema";
 import type { Check, Problem, Step } from "./schema";
 
 function makeProblem(step: Partial<Step> & { checks: Check[] }): Problem {
+  const sum = step.checks.reduce((s, c) => s + c.marks, 0);
   return problemSchema.parse({
     id: "p1",
     title: "Test problem",
     difficulty: "easy",
     brief: "Do things.",
-    steps: [{ id: "s1", prompt: "Do it", marks: 10, hints: [], ...step }],
+    steps: [{ id: "s1", prompt: "Do it", hints: [], marks: sum, ...step }],
   });
 }
 
@@ -124,6 +125,24 @@ describe("command usage checks", () => {
     const r = grade([{ type: "commandUsedWithFlag", command: "ls", flag: "-l", marks: 2 }], { commands: ["ls -l /"] });
     expect(r.passed).toBe(true);
     expect(grade([{ type: "commandUsedWithFlag", command: "ls", flag: "-l", marks: 2 }], { commands: ["ls /"] }).passed).toBe(false);
+  });
+
+  it("commandUsed sees past pipes and redirection", () => {
+    const r = grade([{ type: "commandUsed", commands: ["grep"], marks: 2 }], { commands: ["cat /f | grep error"] });
+    expect(r.passed).toBe(true);
+    const r2 = grade([{ type: "commandUsed", commands: ["grep"], marks: 2 }], { commands: ["echo hi > out.txt"] });
+    expect(r2.passed).toBe(false);
+  });
+
+  it("cwdEquals compares the student's working directory", () => {
+    const vfs = new Vfs({ dirs: ["/home/student/docs"] });
+    vfs.cwd = "/home/student/docs";
+    const problem = makeProblem({ checks: [{ type: "cwdEquals", path: "/home/student/docs", marks: 3 }] });
+    const r = gradeStep({ vfs, stepCommands: ["cd /home/student/docs"], lastOutput: "", problem, step: problem.steps[0] });
+    expect(r.passed).toBe(true);
+    const vfs2 = new Vfs();
+    const r2 = gradeStep({ vfs: vfs2, stepCommands: [], lastOutput: "", problem, step: problem.steps[0] });
+    expect(r2.passed).toBe(false);
   });
 });
 
