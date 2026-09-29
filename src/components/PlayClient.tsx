@@ -28,7 +28,8 @@ export default function PlayClient({ id }: { id: string }) {
   }
 
   return (
-    <main className="h-screen p-2 sm:p-3">
+    <main className="relative h-screen p-2 sm:p-3">
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-grid" />
       <ProblemPlayer problem={problem} />
     </main>
   );

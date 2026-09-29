@@ -211,10 +211,19 @@ export default function TerminalView({ session, sessionKey = 0 }: TerminalViewPr
   }, [session, sessionKey]);
 
   return (
-    <div
-      ref={containerRef}
-      className="h-full w-full rounded-xl border border-term-border bg-[#0a0e14] p-3 shadow-card"
-      data-testid="terminal"
-    />
+    <div className="glass scanlines relative flex h-full w-full flex-col overflow-hidden rounded-xl border border-term-border shadow-card">
+      {/* window chrome */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-white/5 bg-white/[0.02] px-4 py-2">
+        <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
+        <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
+        <span className="h-3 w-3 rounded-full bg-[#28c840]" />
+        <span className="ml-3 font-mono text-[11px] text-term-muted">student@trainer: ~</span>
+      </div>
+      <div
+        ref={containerRef}
+        className="min-h-0 w-full flex-1 p-3"
+        data-testid="terminal"
+      />
+    </div>
   );
 }

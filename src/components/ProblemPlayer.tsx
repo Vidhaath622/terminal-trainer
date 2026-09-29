@@ -6,6 +6,7 @@
  * Session auto-grades after every command; Verify shows per-check detail.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import TerminalView from "./TerminalView";
 import { Session, type SessionEvent, type StorageLike } from "@/engine/session";
 import { maxMarks, type GradeResult } from "@/engine/grader";
@@ -78,28 +79,51 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
   return (
     <div className="flex h-full flex-col">
       {/* score bar */}
-      <div className={`flex items-center justify-between gap-4 border-b border-term-border bg-term-panel px-4 py-2 ${compact ? "py-1.5" : ""}`}>
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold">{problem.title}</h1>
-          <p className="text-xs capitalize tracking-wide text-term-muted">{problem.difficulty} · {problem.steps.length} steps</p>
+      <div className={`glass relative z-10 flex items-center justify-between gap-4 border-b border-term-border px-4 py-2 ${compact ? "py-1.5" : ""}`}>
+        <div className="flex min-w-0 items-center gap-3">
+          {!compact && (
+            <Link
+              href="/"
+              aria-label="Back to home page"
+              title="Back to home page"
+              className="shine shrink-0 rounded-lg border border-term-border bg-term-raise/60 px-2.5 py-1.5 text-xs font-medium text-term-muted transition hover:border-term-blue/60 hover:text-term-blue"
+              data-testid="back-btn"
+            >
+              ← Back
+            </Link>
+          )}
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold">{problem.title}</h1>
+            <p className="text-xs capitalize tracking-wide text-term-muted">{problem.difficulty} · {problem.steps.length} steps</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <div className={`font-mono text-sm font-semibold ${marksColor(session.earned, totalMax)}`} data-testid="marks">
+            <div className={`font-mono text-sm font-semibold tabular-nums ${marksColor(session.earned, totalMax)}`} data-testid="marks">
               {session.earned} <span className="text-term-muted">/ {totalMax}</span>
             </div>
             {/* progress bar */}
-            <div className="mt-1 h-1 w-28 overflow-hidden rounded-full bg-term-border">
+            <div className="relative mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-term-border">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${pct === 100 ? "bg-term-green" : "bg-term-blue"}`}
+                className={`h-full rounded-full transition-all duration-700 ease-out ${
+                  pct === 100
+                    ? "bg-gradient-to-r from-term-green to-emerald-300 shadow-glow"
+                    : "bg-gradient-to-r from-term-blue to-cyan-300"
+                }`}
                 style={{ width: `${pct}%` }}
                 data-testid="progress-fill"
               />
+              {pct > 0 && pct < 100 && (
+                <div
+                  className="pointer-events-none absolute top-0 h-full w-6 animate-shimmer bg-gradient-to-r from-transparent via-white/25 to-transparent"
+                  style={{ left: `max(0px, calc(${pct}% - 24px))` }}
+                />
+              )}
             </div>
           </div>
           <button
             onClick={handleReset}
-            className="rounded-lg border border-term-border px-2.5 py-1.5 text-xs font-medium text-term-muted transition hover:border-term-red/50 hover:text-term-red"
+            className="shine rounded-lg border border-term-border bg-term-raise/60 px-2.5 py-1.5 text-xs font-medium text-term-muted transition hover:border-term-red/50 hover:text-term-red"
             data-testid="reset-btn"
           >
             Reset
@@ -108,8 +132,7 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
       </div>
 
       <div className="flex min-h-0 flex-1">
-        {/* step sidebar */}
-        <aside className="w-72 shrink-0 overflow-y-auto border-r border-term-border bg-term-panel p-3 sm:w-80">
+        {/* step sidebar */}        <aside className="w-72 shrink-0 overflow-y-auto border-r border-term-border bg-term-panel/70 p-3 sm:w-80">
           <ol className="space-y-2">
             {problem.steps.map((step, idx) => {
               const stepDone = idx < session.currentStepIndex;
@@ -117,23 +140,29 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
               return (
                 <li
                   key={step.id}
-                  className={`rounded-lg border p-2.5 text-xs transition ${
+                  className={`relative rounded-lg border p-2.5 text-xs transition-all duration-200 ${
                     stepDone
                       ? "border-term-green/40 bg-term-green/10"
                       : current
                         ? "border-term-blue/60 bg-term-blue/10 shadow-glow-blue"
-                        : "border-term-border opacity-60"
+                        : "border-term-border opacity-60 hover:opacity-90 hover:border-term-muted/40"
                   }`}
                   data-testid={`step-${idx}`}
                 >
+                  {current && (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-y-0 -left-3 w-[3px] rounded-full bg-gradient-to-b from-term-blue to-cyan-300 shadow-glow-blue"
+                    />
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 font-semibold">
                       <span
                         className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] ${
                           stepDone
-                            ? "bg-term-green text-term-bg"
+                            ? "bg-term-green text-term-bg shadow-glow"
                             : current
-                              ? "bg-term-blue text-term-bg"
+                              ? "bg-term-blue text-term-bg shadow-glow-blue"
                               : "border border-term-border text-term-muted"
                         }`}
                       >
@@ -165,8 +194,9 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
             })}
           </ol>
           {done && (
-            <div className="mt-3 animate-slideUp rounded-lg border border-term-green/50 bg-term-green/10 p-3 text-xs font-medium text-term-green shadow-glow" data-testid="complete-banner">
-              🎉 Problem complete — {session.earned}/{totalMax} marks!
+            <div className="relative mt-3 animate-slideUp overflow-hidden rounded-lg border border-term-green/50 bg-term-green/10 p-3 text-xs font-medium text-term-green shadow-glow" data-testid="complete-banner">
+              <div aria-hidden className="animate-shimmer absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent bg-[length:200%_100%]" />
+              <span className="relative">🎉 Problem complete — {session.earned}/{totalMax} marks!</span>
             </div>
           )}
         </aside>
@@ -176,12 +206,12 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
           <div className="min-h-0 flex-1 p-2">
             <TerminalView session={session} sessionKey={sessionKey} />
           </div>
-          <div className="border-t border-term-border bg-term-panel p-3">
+          <div className="border-t border-term-border bg-term-panel/70 p-3">
             <div className="flex items-center gap-3">
               <button
                 onClick={handleVerify}
                 disabled={done}
-                className="rounded-lg bg-term-green/15 px-4 py-2 text-xs font-semibold text-term-green ring-1 ring-term-green/30 transition hover:bg-term-green/25 hover:shadow-glow disabled:opacity-40 disabled:ring-0"
+                className="shine rounded-lg bg-term-green/15 px-4 py-2 text-xs font-semibold text-term-green ring-1 ring-term-green/30 transition hover:bg-term-green/25 hover:shadow-glow disabled:opacity-40 disabled:ring-0"
                 data-testid="verify-btn"
               >
                 ⚡ Verify step {done ? "—" : currentIdx + 1}
@@ -199,9 +229,10 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
                   {grade.results.map((r, i) => (
                     <li
                       key={i}
-                      className={`flex items-start gap-2 rounded border px-2 py-1 text-xs ${
+                      className={`animate-fadeIn flex items-start gap-2 rounded border px-2 py-1 text-xs ${
                         r.passed ? "border-term-green/25 bg-term-green/5" : "border-term-red/25 bg-term-red/5"
                       }`}
+                      style={{ animationDelay: `${i * 60}ms` }}
                     >
                       <span className={r.passed ? "text-term-green" : "text-term-red"}>{r.passed ? "✓" : "✗"}</span>
                       <span className="flex-1 text-term-text/85">{r.message}</span>

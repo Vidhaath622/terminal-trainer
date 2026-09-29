@@ -13,8 +13,9 @@ html {
 body {
   background-color: #0a0e14;
   background-image:
-    radial-gradient(1100px 500px at 85% -10%, rgba(88, 166, 255, 0.07), transparent 60%),
-    radial-gradient(900px 480px at -10% 0%, rgba(63, 185, 80, 0.06), transparent 60%);
+    radial-gradient(1100px 500px at 85% -10%, rgba(88, 166, 255, 0.09), transparent 60%),
+    radial-gradient(900px 480px at -10% 0%, rgba(63, 185, 80, 0.07), transparent 60%),
+    radial-gradient(1000px 600px at 50% 120%, rgba(163, 113, 247, 0.06), transparent 65%);
   background-repeat: no-repeat;
   background-attachment: fixed;
 }
@@ -32,8 +33,11 @@ body {
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #2a3441;
+  background: linear-gradient(180deg, #2a3441, #1e2733);
   border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #3d4a5d;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
@@ -43,7 +47,69 @@ body {
   .text-gradient {
     @apply bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 bg-clip-text text-transparent;
   }
+  .text-gradient-violet {
+    @apply bg-gradient-to-r from-violet-400 via-fuchsia-300 to-sky-400 bg-clip-text text-transparent;
+  }
   .card {
     @apply rounded-xl border border-term-border bg-term-panel shadow-card;
+  }
+  /* Frosted panel with a top edge light. */
+  .glass {
+    background: linear-gradient(180deg, rgba(21, 29, 41, 0.85), rgba(16, 22, 31, 0.92));
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  /* Animated highlight sweep across buttons/cards (hidden at rest). */
+  .shine {
+    position: relative;
+    overflow: hidden;
+  }
+  .shine::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -80%;
+    width: 60%;
+    background: linear-gradient(
+      115deg,
+      transparent,
+      rgba(255, 255, 255, 0.14),
+      transparent
+    );
+    transform: skewX(-20deg);
+    transition: left 0.7s ease;
+    pointer-events: none;
+  }
+  .shine:hover::after {
+    left: 130%;
+  }
+  /* Subtle blueprint grid, fading at the edges. */
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(88, 166, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(88, 166, 255, 0.05) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 90% 70% at 50% 20%, black 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 20%, black 30%, transparent 75%);
+  }
+  /* CRT scanlines for the terminal glass. */
+  .scanlines::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.025) 0px,
+      rgba(255, 255, 255, 0.025) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    pointer-events: none;
+    border-radius: inherit;
+  }
+  .animate-pulse-dot {
+    animation: pulseGlow 2.4s ease-in-out infinite;
   }
 }
