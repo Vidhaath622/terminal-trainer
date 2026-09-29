@@ -1,10 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Static export: `npm run build` emits a self-contained out/ folder that
-  // runs on any static host (college webspace, Netlify, S3, GitHub Pages).
-  // Remove "output" if you ever need server routes or dynamic SSR.
-  output: "export",
+  // Server-capable build: /api/* routes run as Vercel functions (GitHub OAuth
+  // + progress sync), while pages remain statically generated where possible.
+  // Re-add `output: "export"` only if you ever return to pure static hosting.
   images: { unoptimized: true },
   trailingSlash: true,
 };

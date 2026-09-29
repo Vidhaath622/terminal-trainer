@@ -1,4 +1,6 @@
 import Link from "next/link";
+import GithubAuthButton from "@/components/GithubAuthButton";
+import AuthErrorToast from "@/components/AuthErrorToast";
 import ProblemsCatalog from "@/components/ProblemsCatalog";
 import { LAUNCH_PROBLEMS } from "@/problems/launch";
 import { maxMarks } from "@/engine/grader";
@@ -9,6 +11,7 @@ export default function Home() {
 
   return (
     <main className="relative mx-auto max-w-6xl px-6 pb-16 pt-10">
+      <AuthErrorToast />
       {/* ambient orbs + blueprint grid */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute inset-0 bg-grid" />
@@ -50,7 +53,13 @@ export default function Home() {
           >
             Embed in your site
           </Link>
+          <span className="mx-1 hidden text-term-border sm:inline">|</span>
+          <GithubAuthButton />
         </div>
+        <p className="mt-2 text-xs text-term-muted">
+          Signing in links your GitHub account and syncs marks + progress to the cloud — pick up
+          on any device, never lose a step.
+        </p>
 
         {/* hero terminal mock */}
         <div className="relative mt-12 max-w-3xl">

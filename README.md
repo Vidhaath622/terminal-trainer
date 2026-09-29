@@ -29,9 +29,30 @@ npm run build      # production build
 | Roles | `src/roles/` | Teacher/student/admin capabilities, quizzes, submissions |
 | Embed API | `src/embed/protocol.ts` | postMessage types + host helper |
 | UI | `src/components/`, `src/app/` | xterm terminal, player, teacher console, docs |
+| GitHub auth + sync | `src/server/`, `src/lib/sync.ts` | OAuth, Neon Postgres, signed cookies |
+| Account dashboard | `src/app/account`, `src/components/AccountClient.tsx` | synced marks & progress |
 
 Routes: `/` (catalog) · `/play/[id]` (practice) · `/embed` (iframe widget) ·
-`/teacher` (role console) · `/quiz` (quiz demo) · `/docs/embed` (integration guide).
+`/teacher` (role console) · `/quiz` (quiz demo) · `/docs/embed` (integration guide) ·
+`/account` (GitHub-linked progress) · `/api/*` (auth + progress functions).
+
+## GitHub accounts & cloud progress sync
+
+Visitors can link a GitHub account; per-problem progress (marks, completed steps,
+command history) is saved to Postgres and restored on any device. Anonymous visitors
+keep pure-localStorage progress. Setup (env vars read by `/api/*`):
+
+```bash
+GITHUB_CLIENT_ID=...      # OAuth app: callback https://YOUR-HOST/api/auth/callback/github
+GITHUB_CLIENT_SECRET=...
+SESSION_SECRET=...        # openssl rand -base64 32
+DATABASE_URL=...          # Neon Postgres connection string (tables auto-create)
+```
+
+When signed in, completions are debounce-pushed to `/api/progress/[problemId]`;
+`/play` restores the freshest of local vs cloud. `/account` shows synced totals and
+a disconnect action (deletes cloud rows). The `/embed` widget stays anonymous and
+does not render sign-in chrome.
 
 ## Embedding into a college website
 
@@ -56,5 +77,6 @@ the same rules a server backend would enforce.
 
 ## Testing
 
-189 tests across engine, roles, embed protocol, and the launch problem set — including
-a machine-verified solution path for every problem (full marks proven, not assumed).
+206 tests across engine, roles, embed protocol, the launch problem set, progress
+sync helpers, and session cookie crypto — including a machine-verified solution
+path for every problem (full marks proven, not assumed).

@@ -3,7 +3,7 @@
  * Shown on the standalone /play/[id] route; hidden in compact (embed) mode
  * so the host page's own navigation isn't duplicated inside the iframe.
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeAll } from "vitest";
 import { render, screen } from "@testing-library/react";
 import ProblemPlayer from "./ProblemPlayer";
 import { getLaunchProblem } from "@/problems/launch";
@@ -12,6 +12,14 @@ import { getLaunchProblem } from "@/problems/launch";
 vi.mock("./TerminalView", () => ({
   default: () => <div data-testid="terminal-stub" />,
 }));
+
+// SyncChip probes /api/me on mount; answer synchronously so React tests stay quiet.
+beforeAll(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.resolve(new Response(JSON.stringify({ user: null }), { status: 200 })))
+  );
+});
 
 const problem = getLaunchProblem("pwd-navigate")!;
 

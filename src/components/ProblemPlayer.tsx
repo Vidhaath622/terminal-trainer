@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import TerminalView from "./TerminalView";
-import { Session, type SessionEvent, type StorageLike } from "@/engine/session";
+import SyncChip, { type SyncState } from "./SyncChip";
+import { Session, type SessionEvent, type SessionProgress, type StorageLike } from "@/engine/session";
 import { maxMarks, type GradeResult } from "@/engine/grader";
 import type { Problem } from "@/engine/schema";
 
@@ -20,6 +21,14 @@ export interface ProblemPlayerProps {
   storage?: StorageLike;
   /** true inside iframes: hide chrome that would duplicate the host page */
   compact?: boolean;
+  /** resume from a previously saved blob (local or cloud); null = fresh start */
+  initialProgress?: SessionProgress | null;
+  /** signed into GitHub (drives the sync chip) */
+  signedIn?: boolean;
+  /** cloud sync indicator state */
+  syncState?: SyncState;
+  /** called after each command with the current progress blob (cloud push) */
+  onProgressChange?: (progress: SessionProgress) => void;
 }
 
 function marksColor(earned: number, max: number): string {
@@ -29,9 +38,24 @@ function marksColor(earned: number, max: number): string {
   return "text-term-text";
 }
 
-export default function ProblemPlayer({ problem, studentId = null, onEvent, storage, compact = false }: ProblemPlayerProps) {
+export default function ProblemPlayer({
+  problem,
+  studentId = null,
+  onEvent,
+  storage,
+  compact = false,
+  initialProgress = null,
+  signedIn = false,
+  syncState = "signed-out",
+  onProgressChange,
+}: ProblemPlayerProps) {
   const session = useMemo(
-    () => new Session(problem, { storage, studentId }),
+    () =>
+      initialProgress
+        ? Session.restore(problem, JSON.stringify(initialProgress), { storage, studentId })
+        : new Session(problem, { storage, studentId }),
+    // initialProgress is only read on mount/reset; identity via problem + key
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [problem, storage, studentId]
   );
   const [, bump] = useState(0);
@@ -40,11 +64,14 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
   const [sessionKey, setSessionKey] = useState(0);
   const eventRef = useRef(onEvent);
   eventRef.current = onEvent;
+  const progressCbRef = useRef(onProgressChange);
+  progressCbRef.current = onProgressChange;
 
   // Emit session events (step:completed / problem:completed) to the parent.
   useEffect(() => {
     const off = session.onChange((event) => {
       eventRef.current?.(event);
+      progressCbRef.current?.(session.progress());
       bump((n) => n + 1);
     });
     return off;
@@ -98,6 +125,7 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {!compact && <SyncChip state={signedIn ? syncState : "signed-out"} />}
           <div className="text-right">
             <div className={`font-mono text-sm font-semibold tabular-nums ${marksColor(session.earned, totalMax)}`} data-testid="marks">
               {session.earned} <span className="text-term-muted">/ {totalMax}</span>
