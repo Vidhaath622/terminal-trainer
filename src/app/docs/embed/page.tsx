@@ -2,10 +2,11 @@ import CodeBlock from "@/components/CodeBlock";
 
 export default function EmbedDocsPage() {
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-8 text-sm leading-relaxed">
-      <header>
-        <h1 className="text-2xl font-bold">Embedding Terminal Trainer</h1>
-        <p className="mt-2 text-term-text/70">
+    <main className="mx-auto max-w-3xl space-y-8 px-6 pb-16 pt-10 text-sm leading-relaxed">
+      <header className="animate-slideUp">
+        <p className="text-xs font-semibold uppercase tracking-widest text-term-blue">Integration guide</p>
+        <h1 className="mt-1 text-2xl font-bold">Embedding Terminal Trainer</h1>
+        <p className="mt-3 max-w-2xl text-term-muted">
           Terminal Trainer is designed to drop into any college website — WordPress, Moodle,
           Drupal, or a custom LMS — via an iframe plus a small postMessage API. Your site owns
           the students; we own the practice environment and grading.

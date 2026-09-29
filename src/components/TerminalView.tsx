@@ -101,13 +101,22 @@ export default function TerminalView({ session, sessionKey = 0 }: TerminalViewPr
       if (disposed || !containerRef.current) return;
       const t = new XTerm({
         cursorBlink: true,
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+        fontFamily: "var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
         fontSize: 14,
+        lineHeight: 1.35,
         theme: {
-          background: "#0d1117",
-          foreground: "#e6edf3",
+          background: "#0a0e14",
+          foreground: "#dbe4ee",
           cursor: "#3fb950",
-          selectionBackground: "#30363d",
+          cursorAccent: "#0a0e14",
+          selectionBackground: "rgba(88,166,255,0.3)",
+          black: "#0a0e14",
+          brightBlack: "#8b98a9",
+          green: "#3fb950",
+          brightGreen: "#56d364",
+          blue: "#58a6ff",
+          red: "#f85149",
+          yellow: "#d29922",
         },
       });
       term = t;
@@ -189,7 +198,8 @@ export default function TerminalView({ session, sessionKey = 0 }: TerminalViewPr
       });
 
       // welcome banner
-      t.writeln("\x1b[38;5;71mTerminal Trainer\x1b[0m - type \x1b[38;5;110mhelp\x1b[0m for commands, \x1b[38;5;110mman <cmd>\x1b[0m for details.");
+      t.writeln("\x1b[38;5;71m● Terminal Trainer\x1b[0m \x1b[38;5;245m— simulated shell\x1b[0m");
+      t.writeln("\x1b[38;5;245mType \x1b[38;5;110mhelp\x1b[0m for commands, \x1b[38;5;110mman <cmd>\x1b[0m for details. Tab completes, ↑ recalls.\x1b[0m");
     });
 
     return () => {
@@ -200,5 +210,11 @@ export default function TerminalView({ session, sessionKey = 0 }: TerminalViewPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, sessionKey]);
 
-  return <div ref={containerRef} className="h-full w-full" data-testid="terminal" />;
+  return (
+    <div
+      ref={containerRef}
+      className="h-full w-full rounded-xl border border-term-border bg-[#0a0e14] p-3 shadow-card"
+      data-testid="terminal"
+    />
+  );
 }

@@ -46,8 +46,15 @@ const QUIZ = {
 
 export default function QuizPage() {
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <QuizRunner quiz={QUIZ} />
+    <main className="mx-auto max-w-2xl px-6 pb-16 pt-10">
+      <header className="mb-6 animate-slideUp">
+        <p className="text-xs font-semibold uppercase tracking-widest text-term-yellow">Auto-graded</p>
+        <h1 className="mt-1 text-2xl font-bold">Quizzes & assignments</h1>
+        <p className="mt-2 text-sm text-term-muted">Answer and submit — scoring is instant.</p>
+      </header>
+      <div className="card p-6">
+        <QuizRunner quiz={QUIZ} />
+      </div>
     </main>
   );
 }

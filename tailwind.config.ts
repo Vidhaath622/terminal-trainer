@@ -4,17 +4,43 @@ const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+      },
       colors: {
         term: {
-          bg: "#0d1117",
-          panel: "#161b22",
-          border: "#30363d",
-          text: "#e6edf3",
+          bg: "#0a0e14",
+          panel: "#10161f",
+          raise: "#151d29",
+          border: "#1e2733",
+          text: "#dbe4ee",
+          muted: "#8b98a9",
           green: "#3fb950",
+          blue: "#58a6ff",
           red: "#f85149",
           yellow: "#d29922",
-          blue: "#58a6ff",
+          violet: "#a371f7",
         },
+      },
+      boxShadow: {
+        glow: "0 0 32px -8px rgba(63,185,80,0.35)",
+        "glow-blue": "0 0 32px -8px rgba(88,166,255,0.35)",
+        card: "0 1px 0 0 rgba(255,255,255,0.03) inset, 0 8px 24px -12px rgba(0,0,0,0.6)",
+      },
+      keyframes: {
+        fadeIn: {
+          from: { opacity: "0", transform: "translateY(4px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+        slideUp: {
+          from: { opacity: "0", transform: "translateY(10px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+      },
+      animation: {
+        fadeIn: "fadeIn 0.25s ease-out both",
+        slideUp: "slideUp 0.35s ease-out both",
       },
     },
   },

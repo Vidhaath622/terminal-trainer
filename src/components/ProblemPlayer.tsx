@@ -73,21 +73,33 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
   const done = session.isComplete;
   const currentIdx = Math.min(session.currentStepIndex, problem.steps.length - 1);
 
+  const pct = totalMax === 0 ? 0 : Math.round((session.earned / totalMax) * 100);
+
   return (
     <div className="flex h-full flex-col">
       {/* score bar */}
-      <div className={`flex items-center justify-between border-b border-term-border bg-term-panel px-4 py-2 ${compact ? "py-1.5" : ""}`}>
+      <div className={`flex items-center justify-between gap-4 border-b border-term-border bg-term-panel px-4 py-2 ${compact ? "py-1.5" : ""}`}>
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold">{problem.title}</h1>
-          <p className="text-xs text-term-text/60">{problem.difficulty} · {problem.steps.length} steps</p>
+          <p className="text-xs capitalize tracking-wide text-term-muted">{problem.difficulty} · {problem.steps.length} steps</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className={`font-mono text-sm ${marksColor(session.earned, totalMax)}`} data-testid="marks">
-            {session.earned} / {totalMax}
+          <div className="text-right">
+            <div className={`font-mono text-sm font-semibold ${marksColor(session.earned, totalMax)}`} data-testid="marks">
+              {session.earned} <span className="text-term-muted">/ {totalMax}</span>
+            </div>
+            {/* progress bar */}
+            <div className="mt-1 h-1 w-28 overflow-hidden rounded-full bg-term-border">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${pct === 100 ? "bg-term-green" : "bg-term-blue"}`}
+                style={{ width: `${pct}%` }}
+                data-testid="progress-fill"
+              />
+            </div>
           </div>
           <button
             onClick={handleReset}
-            className="rounded border border-term-border px-2 py-1 text-xs hover:bg-term-border/40"
+            className="rounded-lg border border-term-border px-2.5 py-1.5 text-xs font-medium text-term-muted transition hover:border-term-red/50 hover:text-term-red"
             data-testid="reset-btn"
           >
             Reset
@@ -105,30 +117,47 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
               return (
                 <li
                   key={step.id}
-                  className={`rounded border p-2 text-xs ${
+                  className={`rounded-lg border p-2.5 text-xs transition ${
                     stepDone
                       ? "border-term-green/40 bg-term-green/10"
                       : current
-                        ? "border-term-blue/60 bg-term-blue/10"
+                        ? "border-term-blue/60 bg-term-blue/10 shadow-glow-blue"
                         : "border-term-border opacity-60"
                   }`}
                   data-testid={`step-${idx}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold">{stepDone ? "✓" : current ? "→" : "·"} Step {idx + 1}</span>
-                    <span className="font-mono">{step.marks} mk</span>
+                    <span className="flex items-center gap-1.5 font-semibold">
+                      <span
+                        className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] ${
+                          stepDone
+                            ? "bg-term-green text-term-bg"
+                            : current
+                              ? "bg-term-blue text-term-bg"
+                              : "border border-term-border text-term-muted"
+                        }`}
+                      >
+                        {stepDone ? "✓" : idx + 1}
+                      </span>
+                      Step {idx + 1}
+                    </span>
+                    <span className={`font-mono ${stepDone ? "text-term-green" : "text-term-muted"}`}>{step.marks} mk</span>
                   </div>
-                  <p className="mt-1 leading-snug text-term-text/80">{step.prompt}</p>
+                  <p className={`mt-1.5 leading-snug ${stepDone ? "text-term-muted" : "text-term-text/85"}`}>{step.prompt}</p>
                   {current && step.hints.length > 0 && (
-                    <div className="mt-1">
+                    <div className="mt-1.5">
                       <button
-                        className="text-term-blue hover:underline"
+                        className="font-medium text-term-blue transition hover:underline"
                         onClick={() => setShowHints((v) => !v)}
                         data-testid="hints-btn"
                       >
                         {showHints ? "Hide hint" : "Show hint"}
                       </button>
-                      {showHints && <p className="mt-1 italic text-term-yellow">💡 {step.hints[0]}</p>}
+                      {showHints && (
+                        <p className="mt-1.5 animate-fadeIn rounded border border-term-yellow/30 bg-term-yellow/10 p-1.5 italic text-term-yellow">
+                          {step.hints[0]}
+                        </p>
+                      )}
                     </div>
                   )}
                 </li>
@@ -136,7 +165,7 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
             })}
           </ol>
           {done && (
-            <div className="mt-3 rounded border border-term-green/50 bg-term-green/10 p-2 text-xs text-term-green" data-testid="complete-banner">
+            <div className="mt-3 animate-slideUp rounded-lg border border-term-green/50 bg-term-green/10 p-3 text-xs font-medium text-term-green shadow-glow" data-testid="complete-banner">
               🎉 Problem complete — {session.earned}/{totalMax} marks!
             </div>
           )}
@@ -152,26 +181,31 @@ export default function ProblemPlayer({ problem, studentId = null, onEvent, stor
               <button
                 onClick={handleVerify}
                 disabled={done}
-                className="rounded bg-term-green/20 px-3 py-1.5 text-xs font-semibold text-term-green hover:bg-term-green/30 disabled:opacity-40"
+                className="rounded-lg bg-term-green/15 px-4 py-2 text-xs font-semibold text-term-green ring-1 ring-term-green/30 transition hover:bg-term-green/25 hover:shadow-glow disabled:opacity-40 disabled:ring-0"
                 data-testid="verify-btn"
               >
-                Verify step {done ? "—" : currentIdx + 1}
+                ⚡ Verify step {done ? "—" : currentIdx + 1}
               </button>
-              <span className="text-xs text-term-text/60">
+              <span className="text-xs text-term-muted">
                 Step {Math.min(currentIdx + 1, problem.steps.length)} of {problem.steps.length}
               </span>
             </div>
             {grade && !done && (
-              <div className="mt-2 space-y-1" data-testid="verify-results">
-                <div className="text-xs font-semibold">
-                  {grade.passed ? "✅ All checks passed" : "❌ Not yet"} — {grade.earned}/{grade.max} marks
+              <div className="mt-2.5 animate-fadeIn space-y-1" data-testid="verify-results">
+                <div className={`text-xs font-semibold ${grade.passed ? "text-term-green" : "text-term-red"}`}>
+                  {grade.passed ? "✅ All checks passed — step complete!" : "❌ Not yet — " + grade.earned + "/" + grade.max + " marks"}
                 </div>
-                <ul className="space-y-0.5">
+                <ul className="space-y-1">
                   {grade.results.map((r, i) => (
-                    <li key={i} className="text-xs">
-                      <span className={r.passed ? "text-term-green" : "text-term-red"}>{r.passed ? "✓" : "✗"}</span>{" "}
-                      <span className="text-term-text/80">{r.message}</span>{" "}
-                      <span className="text-term-text/50">({r.passed ? r.marks : 0}/{r.check.marks})</span>
+                    <li
+                      key={i}
+                      className={`flex items-start gap-2 rounded border px-2 py-1 text-xs ${
+                        r.passed ? "border-term-green/25 bg-term-green/5" : "border-term-red/25 bg-term-red/5"
+                      }`}
+                    >
+                      <span className={r.passed ? "text-term-green" : "text-term-red"}>{r.passed ? "✓" : "✗"}</span>
+                      <span className="flex-1 text-term-text/85">{r.message}</span>
+                      <span className="font-mono text-term-muted">{r.passed ? r.marks : 0}/{r.check.marks}</span>
                     </li>
                   ))}
                 </ul>
