@@ -2,6 +2,8 @@ import Link from "next/link";
 import GithubAuthButton from "@/components/GithubAuthButton";
 import AuthErrorToast from "@/components/AuthErrorToast";
 import ProblemsCatalog from "@/components/ProblemsCatalog";
+import TheoryNotes from "@/components/TheoryNotes";
+import CommandReferenceSection from "@/components/CommandReference";
 import { LAUNCH_PROBLEMS } from "@/problems/launch";
 import { maxMarks } from "@/engine/grader";
 
@@ -136,6 +138,38 @@ export default function Home() {
           </div>
         </div>
         <ProblemsCatalog />
+      </section>
+
+      {/* command library */}
+      <section id="commands" className="mt-14">
+        <div className="mb-5 flex items-end justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">
+              Command <span className="text-gradient">library</span>
+            </h2>
+            <p className="mt-1 text-sm text-term-muted">
+              What each command does and one runnable example — skim this before attempting the
+              questions. Copy an example straight into the terminal to try it.
+            </p>
+          </div>
+        </div>
+        <CommandReferenceSection />
+      </section>
+
+      {/* theory primer */}
+      <section id="theory" className="mt-14">
+        <div className="mb-5 flex items-end justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">
+              Theory <span className="text-gradient">before practice</span>
+            </h2>
+            <p className="mt-1 text-sm text-term-muted">
+              The minimum theory behind CLI, file-management and git questions — click a card to
+              expand it, then jump straight into the matching problem.
+            </p>
+          </div>
+        </div>
+        <TheoryNotes />
       </section>
 
       {/* feature strip */}

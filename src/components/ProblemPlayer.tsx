@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import TerminalView from "./TerminalView";
 import SyncChip, { type SyncState } from "./SyncChip";
+import RelatedTheorySidebar from "./RelatedTheorySidebar";
 import { Session, type SessionEvent, type SessionProgress, type StorageLike } from "@/engine/session";
 import { maxMarks, type GradeResult } from "@/engine/grader";
 import type { Problem } from "@/engine/schema";
@@ -288,6 +289,11 @@ export default function ProblemPlayer({
               );
             })}
           </ol>
+          {!compact && (
+            <div className="mt-3">
+              <RelatedTheorySidebar problemId={problem.id} />
+            </div>
+          )}
           {done && !practice && (
             <div className={COMPLETE_BANNER_CLASS} data-testid="complete-banner">
               <div aria-hidden className={COMPLETE_SHIMMER_CLASS} />
