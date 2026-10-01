@@ -198,8 +198,8 @@ export default function TerminalView({ session, sessionKey = 0 }: TerminalViewPr
       });
 
       // welcome banner
-      t.writeln("\x1b[38;5;71m● Terminal Trainer\x1b[0m \x1b[38;5;245m— simulated shell\x1b[0m");
-      t.writeln("\x1b[38;5;245mType \x1b[38;5;110mhelp\x1b[0m for commands, \x1b[38;5;110mman <cmd>\x1b[0m for details. Tab completes, ↑ recalls.\x1b[0m");
+      t.writeln("\x1b[38;5;71mTerminal Trainer\x1b[0m \x1b[38;5;245msimulated shell\x1b[0m");
+      t.writeln("\x1b[38;5;245mType \x1b[38;5;110mhelp\x1b[0m for commands, \x1b[38;5;110mman <cmd>\x1b[0m for details. Tab completes, arrows recall.\x1b[0m");
     });
 
     return () => {
@@ -211,9 +211,9 @@ export default function TerminalView({ session, sessionKey = 0 }: TerminalViewPr
   }, [session, sessionKey]);
 
   return (
-    <div className="glass scanlines relative flex h-full w-full flex-col overflow-hidden rounded-xl border border-term-border shadow-card">
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-md border border-term-border bg-[#0a0e14]">
       {/* window chrome */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-white/5 bg-white/[0.02] px-4 py-2">
+      <div className="flex shrink-0 items-center gap-2 border-b border-term-border bg-term-panel px-4 py-2">
         <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
         <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
         <span className="h-3 w-3 rounded-full bg-[#28c840]" />

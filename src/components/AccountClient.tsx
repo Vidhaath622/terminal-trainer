@@ -2,7 +2,7 @@
 
 /**
  * AccountClient: the /account dashboard.
- * Signed out → pitch + connect button. Signed in → profile, synced totals,
+ * Signed out: pitch + connect button. Signed in: profile, synced totals,
  * per-problem progress, and a disconnect action (wipes cloud rows + cookie).
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -98,7 +98,7 @@ export default function AccountClient() {
   if (userLoading) {
     return (
       <main className="mx-auto max-w-3xl px-6 pb-16 pt-10">
-        <div className="h-40 animate-pulse rounded-xl bg-term-panel" />
+        <div className="h-40 animate-pulse rounded bg-term-panel" />
       </main>
     );
   }
@@ -106,9 +106,9 @@ export default function AccountClient() {
   if (!user) {
     return (
       <main className="mx-auto max-w-3xl px-6 pb-16 pt-10">
-        <header className="animate-slideUp">
-          <p className="text-xs font-semibold uppercase tracking-widest text-term-blue">Account</p>
-          <h1 className="mt-1 text-2xl font-bold">Link your GitHub account</h1>
+        <header>
+          <p className="font-mono text-xs font-semibold uppercase tracking-widest text-term-muted">Account</p>
+          <h1 className="mt-1 font-mono text-2xl font-bold">Link your GitHub account</h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-term-muted">
             Signing in connects Terminal Trainer to your GitHub identity and saves every mark,
             completed step, and command session to the cloud — so your progress follows you to any
@@ -117,8 +117,8 @@ export default function AccountClient() {
         </header>
         <div className="mt-6 flex flex-wrap items-center gap-4">
           <GithubAuthButton />
-          <Link href="/" className="text-sm text-term-muted transition hover:text-term-text">
-            ← Back to problems
+          <Link href="/" className="font-mono text-sm text-term-muted hover:text-term-text">
+            Back to problems
           </Link>
         </div>
         <ul className="mt-8 space-y-2 text-sm text-term-muted">
@@ -139,29 +139,29 @@ export default function AccountClient() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 pb-16 pt-10">
-      <header className="animate-slideUp">
-        <p className="text-xs font-semibold uppercase tracking-widest text-term-blue">Account</p>
+      <header>
+        <p className="font-mono text-xs font-semibold uppercase tracking-widest text-term-muted">Account</p>
         <div className="mt-2 flex items-center gap-4">
           {user.avatarUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={user.avatarUrl}
               alt=""
-              className="h-14 w-14 rounded-xl ring-1 ring-term-border"
+              className="h-14 w-14 rounded-md ring-1 ring-term-border"
             />
           )}
           <div>
-            <h1 className="text-2xl font-bold">{user.name ?? user.login}</h1>
+            <h1 className="font-mono text-2xl font-bold">{user.name ?? user.login}</h1>
             <p className="text-sm text-term-muted">
               @{user.login}
-              {user.createdAt ? ` · linked ${timeAgo(user.createdAt)}` : ""}
+              {user.createdAt ? `, linked ${timeAgo(user.createdAt)}` : ""}
             </p>
           </div>
         </div>
       </header>
 
       {totals && (
-        <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-term-border bg-term-border sm:grid-cols-4">
+        <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded border border-term-border bg-term-border sm:grid-cols-4">
           {[
             [`${totals.marks}`, `marks earned / ${totals.marksMax}`],
             [`${totals.problemsComplete}`, "problems complete"],
@@ -179,7 +179,7 @@ export default function AccountClient() {
       <section className="mt-8">
         <h2 className="text-lg font-semibold">Progress by problem</h2>
         {parsed === null ? (
-          <div className="mt-3 h-24 animate-pulse rounded-xl bg-term-panel" />
+          <div className="mt-3 h-24 animate-pulse rounded bg-term-panel" />
         ) : (
           <ul className="mt-3 space-y-2">
             {LAUNCH_PROBLEMS.map((p) => {
@@ -191,11 +191,11 @@ export default function AccountClient() {
                 <li key={p.id} data-testid={`account-row-${p.id}`}>
                   <Link
                     href={`/play/${p.id}`}
-                    className="card group flex items-center gap-4 p-3.5 transition hover:border-term-blue/40"
+                    className="card flex items-center gap-4 p-3.5 hover:border-term-green/60"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="truncate text-sm font-semibold transition group-hover:text-term-blue">
+                        <span className="truncate text-sm font-semibold text-term-text">
                           {p.title}
                         </span>
                         <span className="font-mono text-xs text-term-muted">
@@ -204,21 +204,17 @@ export default function AccountClient() {
                       </div>
                       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-term-border">
                         <div
-                          className={`h-full rounded-full transition-all duration-700 ${
-                            pct === 100
-                              ? "bg-gradient-to-r from-term-green to-emerald-300"
-                              : "bg-gradient-to-r from-term-blue to-cyan-300"
-                          }`}
+                          className={`h-full rounded-full ${pct === 100 ? "bg-term-green" : "bg-term-text/60"}`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
                     </div>
                     <span
-                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      className={`shrink-0 rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide ${
                         complete
                           ? "border-term-green/40 bg-term-green/10 text-term-green"
                           : entry
-                            ? "border-term-blue/40 bg-term-blue/10 text-term-blue"
+                            ? "border-term-border bg-term-raise text-term-text"
                             : "border-term-border text-term-muted"
                       }`}
                     >
@@ -233,16 +229,16 @@ export default function AccountClient() {
       </section>
 
       <footer className="mt-10 flex items-center justify-between border-t border-term-border pt-6">
-        <Link href="/" className="text-sm text-term-muted transition hover:text-term-text">
-          ← Back to problems
+        <Link href="/" className="font-mono text-sm text-term-muted hover:text-term-text">
+          Back to problems
         </Link>
         <button
           onClick={disconnect}
           disabled={disconnecting}
-          className="rounded-lg border border-term-red/40 px-4 py-2 text-sm font-medium text-term-red transition hover:bg-term-red/10 disabled:opacity-50"
+          className="rounded border border-term-red/40 px-4 py-2 font-mono text-sm font-medium text-term-red hover:bg-term-red/10 disabled:opacity-50"
           data-testid="disconnect-btn"
         >
-          {disconnecting ? "Disconnecting…" : "Disconnect GitHub"}
+          {disconnecting ? "Disconnecting" : "Disconnect GitHub"}
         </button>
       </footer>
     </main>
