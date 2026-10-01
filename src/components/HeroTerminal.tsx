@@ -1,104 +1,168 @@
 "use client";
 
 /**
- * HeroTerminal: the hero's terminal mock, typing itself. Types the command
- * character-by-character with a blinking block cursor, fades in the output
- * and the next prompt line, pauses, then loops. Honors prefers-reduced-motion
- * by rendering the fully-typed state immediately (decided on mount, so SSR
- * and the first client render agree).
+ * HeroTerminal: an interactive hero terminal backed by the real engine.
+ *
+ * Reuses LAUNCH_PROBLEMS[0], the Session auto-grader, and the same
+ * TerminalView component as /play/[id] — there is no second shell, parser,
+ * or grading path here. Pass/fail verdicts come from the session's own
+ * auto-grader (step:completed events) and session.verify() (the same
+ * gradeStep the Verify button uses).
+ *
+ * Progress is anonymous and local-only: the session persists through a
+ * StorageLike wrapper that namespaces the engine's storage key under
+ * "tt:hero:" in localStorage. Nothing is sent to the server, sync,
+ * analytics, or account APIs, and no student id is attached.
+ *
+ * The terminal is never focused on mount or hydration; xterm focuses its
+ * hidden input only when the visitor clicks the terminal.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import TerminalView from "./TerminalView";
+import { Session, storageKey } from "@/engine/session";
+import { maxMarks } from "@/engine/grader";
+import { LAUNCH_PROBLEMS } from "@/problems/launch";
 
-const COMMAND = "grep -c ERROR app.log";
-const OUTPUT = "3";
-const NEXT_PROMPT = "chmod 600 secret.txt && echo done";
-const NEXT_OUTPUT = "done";
-const TYPE_MS = 65;
-const AFTER_COMMAND_MS = 500;
-const AFTER_OUTPUT_MS = 700;
-const AFTER_SECOND_MS = 2400;
-const RESTART_MS = 3600;
+const HERO_PREFIX = "tt:hero:";
+
+/** StorageLike over localStorage, namespaced for the hero. Invoked client-side only. */
+function heroStorage() {
+  return {
+    getItem(key: string): string | null {
+      try {
+        return window.localStorage.getItem(HERO_PREFIX + key);
+      } catch {
+        return null;
+      }
+    },
+    setItem(key: string, value: string): void {
+      try {
+        window.localStorage.setItem(HERO_PREFIX + key, value);
+      } catch {
+        // storage unavailable: progress stays in memory
+      }
+    },
+    removeItem(key: string): void {
+      try {
+        window.localStorage.removeItem(HERO_PREFIX + key);
+      } catch {
+        // ignore
+      }
+    },
+  };
+}
 
 export default function HeroTerminal() {
-  const [typed, setTyped] = useState(0);
-  const [phase, setPhase] = useState<"typing" | "output" | "second" | "hold">("typing");
-  const [reduced, setReduced] = useState(false);
+  const problem = LAUNCH_PROBLEMS[0];
+  // Session construction is pure data (no window access), same as /play/[id].
+  const [session, setSession] = useState(() => new Session(problem, { storage: heroStorage() }));
+  const [sessionKey, setSessionKey] = useState(0);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const justCompletedRef = useRef(false);
+  const commandRanRef = useRef<() => void>(() => {});
 
+  // Restore anonymous local progress after hydration (client only).
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setReduced(true);
-      setTyped(COMMAND.length);
-      setPhase("hold");
-      return;
+    const store = heroStorage();
+    const raw = store.getItem(storageKey(problem.id, null));
+    if (!raw) return;
+    try {
+      setSession(Session.restore(problem, raw, { storage: store }));
+      setSessionKey((k) => k + 1);
+    } catch {
+      // incompatible or corrupted blob: start fresh
     }
-    let t: ReturnType<typeof setTimeout>;
-    if (typed < COMMAND.length) {
-      t = setTimeout(() => {
-        setTyped((n) => n + 1);
-        setPhase("typing");
-      }, TYPE_MS);
-    } else if (phase === "typing") {
-      t = setTimeout(() => setPhase("output"), AFTER_COMMAND_MS);
-    } else if (phase === "output") {
-      t = setTimeout(() => setPhase("second"), AFTER_OUTPUT_MS);
-    } else if (phase === "second") {
-      t = setTimeout(() => setPhase("hold"), AFTER_SECOND_MS);
-    } else {
-      t = setTimeout(() => {
-        setTyped(0);
-        setPhase("typing");
-      }, RESTART_MS);
-    }
-    return () => clearTimeout(t);
-  }, [typed, phase]);
+  }, [problem]);
 
-  const done = phase !== "typing" || reduced;
-  const shownText = COMMAND.slice(0, reduced ? COMMAND.length : typed);
+  // Pass feedback comes from the session's own auto-grader events.
+  useEffect(() => {
+    const off = session.onChange((event) => {
+      if (event.type === "step:completed" || event.type === "problem:completed") {
+        justCompletedRef.current = true;
+        if (event.type === "problem:completed") {
+          setFeedback({ ok: true, text: `Problem complete — ${event.earned}/${event.max} marks.` });
+        } else {
+          const stepMarks = problem.steps.find((s) => s.id === event.stepId)?.marks ?? 0;
+          setFeedback({
+            ok: true,
+            text: `Step complete — +${stepMarks} marks (${event.earned}/${event.max} total).`,
+          });
+        }
+      }
+    });
+    return off;
+  }, [session, problem]);
+
+  // Fail feedback comes from the real grader over the current step, checked
+  // after each command the terminal runs. The wrapper below only observes:
+  // every call still goes through the one Session instance.
+  useEffect(() => {
+    commandRanRef.current = () => {
+      if (justCompletedRef.current) {
+        justCompletedRef.current = false;
+        return;
+      }
+      const grade = session.verify();
+      if (grade) {
+        setFeedback({ ok: false, text: `Not yet — ${grade.earned}/${grade.max} marks on this step.` });
+      }
+    };
+  }, [session]);
+
+  // Delegate everything to the real session; only `run` is observed so the
+  // hero can show the grader's verdict. No engine behavior is changed.
+  const instrumented = useMemo(() => {
+    const wrapper = Object.create(session) as Session;
+    wrapper.run = (line: string) => {
+      const result = session.run(line);
+      commandRanRef.current();
+      return result;
+    };
+    return wrapper;
+  }, [session]);
+
+  const done = session.isComplete;
+  const stepIndex = session.currentStepIndex;
+
+  const startOver = () => {
+    session.reset(); // also clears the hero's localStorage entry
+    setSessionKey((k) => k + 1);
+    setFeedback(null);
+  };
 
   return (
-    <div className="glass scanlines overflow-hidden rounded-xl shadow-card relative border-beam">
-      {/* window chrome */}
-      <div className="flex items-center gap-2 border-b border-white/5 bg-white/[0.02] px-4 py-2.5">
-        <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
-        <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
-        <span className="h-3 w-3 rounded-full bg-[#28c840]" />
-        <span className="ml-3 font-mono text-[11px] text-term-muted">student@trainer: ~</span>
+    <div>
+      <p className="font-mono text-sm text-term-muted">
+        {done ? (
+          <span className="text-term-green">
+            Problem complete — {session.earned}/{maxMarks(problem)} marks.
+          </span>
+        ) : stepIndex === 0 ? (
+          <>
+            Type <code className="rounded bg-term-panel px-1 font-mono text-term-green">pwd</code> and
+            press Enter
+          </>
+        ) : (
+          <span>{session.currentStep.prompt}</span>
+        )}
+      </p>
+      <div className="mt-2 h-64 sm:h-72">
+        <TerminalView session={instrumented} sessionKey={sessionKey} />
       </div>
-      <div
-        className="space-y-1.5 px-5 py-4 font-mono text-[13px] leading-relaxed"
-        aria-label={`Terminal demo: ${COMMAND} → ${OUTPUT}`}
+      <p
+        aria-live="polite"
+        className={`mt-2 min-h-[1rem] font-mono text-xs ${feedback ? (feedback.ok ? "text-term-green" : "text-term-red") : "invisible"}`}
       >
-        <div>
-          <span className="text-term-green">student@trainer</span>
-          <span className="text-term-muted">:</span>
-          <span className="text-term-blue">~</span>
-          <span className="text-term-muted">$ </span>
-          <span className="text-term-text">{shownText}</span>
-          <span className="ml-0.5 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-term-green/80" aria-hidden />
-        </div>
-        <div className={`text-term-text/90 transition-opacity duration-500 ${done ? "opacity-100" : "opacity-0"}`}>
-          {OUTPUT}
-        </div>
-        <div
-          className={`transition-opacity duration-500 ${phase === "second" || phase === "hold" ? "opacity-100" : "opacity-0"}`}
+        {feedback ? feedback.text : "\u00A0"}
+      </p>
+      {done && (
+        <button
+          onClick={startOver}
+          className="rounded border border-term-border px-2.5 py-1 font-mono text-xs text-term-muted hover:border-term-green/60"
         >
-          <span className="text-term-green">student@trainer</span>
-          <span className="text-term-muted">:</span>
-          <span className="text-term-blue">~</span>
-          <span className="text-term-muted">$ </span>
-          <span className="text-term-text">{NEXT_PROMPT}</span>
-        </div>
-        <div className={`text-term-green transition-opacity duration-500 ${phase === "hold" ? "opacity-100" : "opacity-0"}`}>
-          {NEXT_OUTPUT}
-        </div>
-        <div className={`flex items-center gap-1 transition-opacity duration-500 ${phase === "hold" ? "opacity-100" : "opacity-0"}`}>
-          <span className="text-term-green">student@trainer</span>
-          <span className="text-term-muted">:</span>
-          <span className="text-term-blue">~</span>
-          <span className="text-term-muted">$ </span>
-          <span className="animate-pulse inline-block h-4 w-2 bg-term-green/80" />
-        </div>
-      </div>
+          Start over
+        </button>
+      )}
     </div>
   );
 }
