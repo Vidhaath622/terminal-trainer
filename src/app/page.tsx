@@ -39,6 +39,12 @@ export default function Home() {
             >
               Browse problems
             </Link>
+            <Link
+              href="/git-problems"
+              className="rounded border border-term-border bg-term-panel px-5 py-2.5 font-mono text-sm font-semibold text-term-text hover:border-term-green/60"
+            >
+              Git problems
+            </Link>
           </div>
 
           <div className="mt-10 max-w-3xl">
@@ -107,6 +113,14 @@ export default function Home() {
             The minimum theory behind CLI, file-management, and git questions.
             Click a card to expand it, then jump into the matching problem.
           </p>
+          <div className="mt-4">
+            <Link
+              href="/?theory=git-setup#theory-git-setup"
+              className="inline-flex rounded bg-term-green/15 px-4 py-2 font-mono text-xs font-semibold text-term-green ring-1 ring-term-green/30 hover:ring-term-green/60"
+            >
+              Git setup guide
+            </Link>
+          </div>
           <div className="mt-5">
             <TheoryNotes />
           </div>

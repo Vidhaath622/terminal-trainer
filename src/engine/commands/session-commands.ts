@@ -30,6 +30,7 @@ export const help: CommandImpl = (_ctx) => {
     "  Filesystem:  pwd cd ls mkdir touch cp mv rm chmod tree",
     "  Text:        cat echo grep head tail wc sort uniq find",
     "  Session:     whoami date history clear man say",
+    "  Git:         git config | init | status | add | commit | log",
     "",
     "Tips: use Tab for completion, Up/Down for history, pipes (|) and redirection (> >>) work.",
     "Type 'verify' to check the current step, or use the Verify button.",

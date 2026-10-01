@@ -334,6 +334,7 @@ const MAN_PAGES: Record<string, string> = {
   clear: "clear - clear the terminal screen\n\nSYNOPSIS\n  clear\n\nDESCRIPTION\n  Clears the terminal screen.\n",
   history: "history - display command history\n\nSYNOPSIS\n  history\n\nDESCRIPTION\n  Display previously executed commands, oldest first.\n",
   date: "date - print the system date and time\n\nSYNOPSIS\n  date\n\nDESCRIPTION\n  Print the current date and time.\n",
+  git: "git - the stupid content tracker (simulated)\n\nSYNOPSIS\n  git config | init | status | add | commit | log\n\nDESCRIPTION\n  A first-commit-sized git: set your identity, create a repository,\n  stage files, commit them, and read the history back.\n  'git help <command>' or 'git <command> -h' explains one command.\n",
 };
 
 export const man: CommandImpl = (_ctx, args) => {

@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { LAUNCH_PROBLEMS, getLaunchProblem } from "./launch";
+import { LAUNCH_PROBLEMS, getLaunchProblem, gitProblems, GIT_PROBLEM_TAGS } from "./launch";
 import { Session } from "@/engine/session";
 import { maxMarks } from "@/engine/grader";
 
 describe("launch problem set", () => {
-  it("has exactly 19 valid problems", () => {
-    expect(LAUNCH_PROBLEMS).toHaveLength(19);
+  it("has exactly 20 valid problems", () => {
+    expect(LAUNCH_PROBLEMS).toHaveLength(20);
     const ids = LAUNCH_PROBLEMS.map((p) => p.id);
-    expect(new Set(ids).size).toBe(19);
+    expect(new Set(ids).size).toBe(20);
   });
 
   it("lookup finds a problem by id", () => {
@@ -20,6 +20,26 @@ describe("launch problem set", () => {
       expect(maxMarks(p)).toBeGreaterThan(0);
       expect(p.steps.length).toBeGreaterThanOrEqual(3);
     }
+  });
+});
+
+describe("git problem filter", () => {
+  it("selects every problem carrying a git tag and nothing else", () => {
+    const git = gitProblems();
+    const expected = LAUNCH_PROBLEMS.filter((p) => p.tags.some((t) => (GIT_PROBLEM_TAGS as readonly string[]).includes(t)));
+    expect(git.map((p) => p.id)).toEqual(expected.map((p) => p.id));
+    expect(git.length).toBeGreaterThan(0);
+    for (const p of git) {
+      expect(p.tags.some((t) => (GIT_PROBLEM_TAGS as readonly string[]).includes(t))).toBe(true);
+    }
+  });
+
+  it("finds the first-commit problem but not CLI-only problems", () => {
+    const ids = gitProblems().map((p) => p.id);
+    expect(ids).toContain("git-first-commit");
+    expect(getLaunchProblem("git-first-commit")?.title).toBe("Your First Git Commit");
+    expect(ids).not.toContain("pwd-navigate");
+    expect(ids).not.toContain("grep-search");
   });
 });
 
@@ -176,6 +196,20 @@ describe("launch problems are solvable to full marks", () => {
       "find media -type d",
       "sort readme.txt > sorted.txt",
       "echo done >> sorted.txt",
+    ],
+    "git-first-commit": [
+      "git config --global user.name \"Ada Lovelace\"",
+      "git config --global user.email ada@example.com",
+      "git config --list",
+      "git config --global init.defaultBranch main",
+      "cd project",
+      "git init",
+      "git status",
+      "git add .",
+      "git status",
+      "git commit -m \"First commit\"",
+      "git log",
+      "git status",
     ],
     "chmod-permissions": [
       "ls -l scripts/backup.sh",

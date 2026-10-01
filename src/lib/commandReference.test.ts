@@ -68,8 +68,8 @@ describe("command reference library", () => {
     expect(COMMAND_CATEGORIES.length).toBe(cats.size);
   });
 
-  it("keeps the registry and reference in sync both ways (26 engine commands + 2 operators)", () => {
-    expect(Object.keys(COMMANDS).length).toBe(26);
-    expect(COMMAND_REFERENCE.length).toBe(28);
+  it("keeps the registry and reference in sync both ways (27 engine commands + 2 operators)", () => {
+    expect(Object.keys(COMMANDS).length).toBe(27);
+    expect(COMMAND_REFERENCE.length).toBe(29);
   });
 });

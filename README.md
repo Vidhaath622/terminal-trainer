@@ -21,18 +21,18 @@ npm run build      # production build
 | --- | --- | --- |
 | Virtual filesystem | `src/engine/vfs.ts` | Dirs/files with modes, owners, snapshots |
 | Shell parser | `src/engine/parser.ts` | Quotes, escapes, pipes, `>` `>>` |
-| Commands | `src/engine/commands/` | 26 commands incl. grep/find/chmod/tree |
+| Commands | `src/engine/commands/` | 27 commands incl. grep/find/chmod/tree and simulated git |
 | Problems & checks | `src/engine/schema.ts` | Zod schema, 15 check types, marks invariant |
 | Grader | `src/engine/grader.ts` | Per-check pass/fail + human messages |
 | Session | `src/engine/session.ts` | Auto-grading, events, reset, persistence |
-| Launch problems | `src/problems/launch.ts` | 19 problems, each with a tested solution |
+| Launch problems | `src/problems/launch.ts` | 20 problems, each with a tested solution |
 | Roles | `src/roles/` | Teacher/student/admin capabilities, quizzes, submissions |
 | Embed API | `src/embed/protocol.ts` | postMessage types + host helper |
 | UI | `src/components/`, `src/app/` | xterm terminal, player, teacher console, docs |
 | GitHub auth + sync | `src/server/`, `src/lib/sync.ts` | OAuth, Neon Postgres, signed cookies |
 | Account dashboard | `src/app/account`, `src/components/AccountClient.tsx` | synced marks & progress |
 
-Routes: `/` (home) · `/problems` (catalog) · `/play/[id]` (practice) · `/embed` (iframe widget) ·
+Routes: `/` (home) · `/problems` (catalog) · `/git-problems` (Git problems) · `/play/[id]` (practice) · `/embed` (iframe widget) ·
 `/teacher` (role console) · `/quiz` (quiz demo) · `/docs/embed` (integration guide) ·
 `/account` (GitHub-linked progress) · `/api/*` (auth + progress functions).
 
@@ -77,6 +77,7 @@ the same rules a server backend would enforce.
 
 ## Testing
 
-220 tests across engine, roles, embed protocol, the launch problem set, progress
-sync helpers, and session cookie crypto — including a machine-verified solution
-path for every problem (full marks proven, not assumed).
+250+ tests across engine (including simulated git), roles, embed protocol, the
+launch problem set, progress sync helpers, and session cookie crypto — including
+a machine-verified solution path for every problem (full marks proven, not
+assumed).

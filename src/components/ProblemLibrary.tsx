@@ -1,15 +1,19 @@
 "use client";
 
 /**
- * ProblemLibrary: browsable library of every launch problem with search and
- * difficulty filter chips (All / Easy / Medium / Hard). Each card shows the
- * difficulty badge, brief, a "first task" peek at step 1, tags, step count
- * and total marks, and links into /play/[id].
+ * ProblemLibrary: browsable library of problems with search and difficulty
+ * filter chips (All / Easy / Medium / Hard). Each card shows the difficulty
+ * badge, brief, a "first task" peek at step 1, tags, step count and total
+ * marks, and links into /play/[id].
+ *
+ * Defaults to every launch problem; pass `problems` to show a subset (the
+ * /git-problems page does this) without duplicating card markup.
  */
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { LAUNCH_PROBLEMS } from "@/problems/launch";
 import { maxMarks } from "@/engine/grader";
+import type { Problem } from "@/engine/schema";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -21,19 +25,19 @@ const DIFFICULTY_STYLE: Record<Difficulty, string> = {
   hard: "text-term-red border-term-red/40 bg-term-red/10",
 };
 
-export default function ProblemLibrary() {
+export default function ProblemLibrary({ problems = LAUNCH_PROBLEMS }: { problems?: Problem[] }) {
   const [query, setQuery] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty | "All">("All");
 
   const counts = useMemo(() => {
     const c: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
-    for (const p of LAUNCH_PROBLEMS) c[p.difficulty as Difficulty] += 1;
+    for (const p of problems) c[p.difficulty as Difficulty] += 1;
     return c;
-  }, []);
+  }, [problems]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return LAUNCH_PROBLEMS.filter((p) => {
+    return problems.filter((p) => {
       if (difficulty !== "All" && p.difficulty !== difficulty) return false;
       if (!q) return true;
       return (
@@ -42,7 +46,7 @@ export default function ProblemLibrary() {
         p.tags.some((t) => t.toLowerCase().includes(q))
       );
     });
-  }, [query, difficulty]);
+  }, [query, difficulty, problems]);
 
   return (
     <div data-testid="problem-library">
@@ -70,7 +74,7 @@ export default function ProblemLibrary() {
               }`}
               data-testid={`problem-chip-${d.toLowerCase()}`}
             >
-              {d === "All" ? `All (${LAUNCH_PROBLEMS.length})` : `${d} (${counts[d]})`}
+              {d === "All" ? `All (${problems.length})` : `${d} (${counts[d]})`}
             </button>
           ))}
         </div>

@@ -96,6 +96,23 @@ export const THEORY_TOPICS: TheoryTopic[] = [
     ],
   },
   {
+    id: "git-setup",
+    icon: "⚙",
+    iconColor: "text-term-yellow",
+    title: "Git setup & configuration",
+    summary: "Name, email, --global, the default branch, and getting help — the one-time setup before your first commit.",
+    points: [
+      "**git config --global user.name \"Your Name\"** and **git config --global user.email \"you@example.com\"** set the identity written into every commit. They are a label, not a login — Git never verifies them.",
+      "**GitHub links commits to your profile by email.** The commit email becomes part of the public history, so if you'd rather not expose your real address, use GitHub's private **noreply email** (Settings → Emails).",
+      "**Quote names with spaces** (\"Your Name\" — one argument, not two). Do this setup **once per computer**; --global applies it to every repo for your user.",
+      "Config has three levels: **system < global < local** — the more specific one wins. --global is your default everywhere; a single repo can override it with a **local** setting later.",
+      "**git config --global init.defaultBranch main** names the first branch **main** in **new repos only** — it does not rename branches in repos you already have.",
+      "Verify with **git config --list** (when a key is set twice, the **last value listed wins** — first thing to check when commits show the wrong identity). **git help <command>** opens the full manual; **git <command> -h** prints a quick summary.",
+    ],
+    practiceHref: "/play/git-first-commit",
+    practiceLabel: "Practice: Your First Git Commit",
+  },
+  {
     id: "pipes",
     icon: "|",
     iconColor: "text-term-blue",
@@ -126,6 +143,7 @@ export const THEORY_LINKS: Record<string, string[]> = {
   "grep-search": ["pipes", "shell"],
   "find-redirect": ["files", "pipes"],
   "chmod-permissions": ["permissions"],
+  "git-first-commit": ["git-setup", "git"],
   "boss-project": ["files", "filesystem", "permissions", "pipes"],
 };
 

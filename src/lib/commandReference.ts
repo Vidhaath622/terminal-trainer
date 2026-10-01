@@ -7,7 +7,7 @@
  * coverage of engine commands stays complete.
  */
 
-export type CommandCategory = "Filesystem" | "Text" | "Session" | "Operators";
+export type CommandCategory = "Filesystem" | "Text" | "Session" | "Git" | "Operators";
 
 export type CommandEntry = {
   /** command name as typed in the shell (operators use their symbol) */
@@ -218,6 +218,15 @@ export const COMMAND_REFERENCE: CommandEntry[] = [
     exampleNote: "On a real Mac this is the macOS `say` voice; in the simulator it echoes the sentence back.",
   },
 
+  // --- Git ----------------------------------------------------------------
+  {
+    name: "git",
+    category: "Git",
+    summary: "Version control: set your identity, make a repository, stage files, commit.",
+    example: "git init",
+    exampleNote: "Turns the current folder into a repository (a hidden .git/ entry appears). Then: git add <file> stages it, git commit -m \"msg\" records it, git log shows history. Configure identity first: git config --global user.name \"Your Name\".",
+  },
+
   // --- Operators ----------------------------------------------------------
   {
     name: "|",
@@ -241,5 +250,6 @@ export const COMMAND_CATEGORIES: CommandCategory[] = [
   "Filesystem",
   "Text",
   "Session",
+  "Git",
   "Operators",
 ];

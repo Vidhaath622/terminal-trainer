@@ -1,9 +1,82 @@
 /**
  * Launch problem set for first-year CS students.
- * Authored content: 19 problems from navigation to a boss challenge.
+ * Authored content: 30 problems from navigation to a boss challenge,
+ * including a ten-problem Git fundamentals track.
  * Pure TypeScript (data) so it can be imported anywhere.
  */
 import { problemSchema, type Problem } from "@/engine/schema";
+
+// ---------- Git practice fixtures ----------
+
+const ADA_NAME = "Ada Lovelace";
+const ADA_EMAIL = "ada@example.com";
+
+const HELLO_V1 = 'print("hello")\n';
+const HELLO_V2 = 'print("hello")\nprint("goodbye")\n';
+const README_V1 = "# Demo\n";
+const README_V2 = "# Demo\n\nLearning git.\n";
+
+/**
+ * Serialized `.git` fixture for the Git problems: a repository with a
+ * pre-loaded history (and optional staging area), so history-reading
+ * problems start from real commits instead of making the student build one.
+ * Shape matches GitMeta in engine/commands/git-commands.ts.
+ */
+function gitFixture(
+  commits: Array<{ id: string; message: string; time: number; files: Record<string, string> }>,
+  staged: Record<string, string> = {}
+): string {
+  return JSON.stringify({
+    version: 1,
+    branch: "main",
+    commits: commits.map((c) => ({ ...c, author: ADA_NAME, email: ADA_EMAIL })),
+    staged,
+    tracked: Object.keys(commits[commits.length - 1].files).sort(),
+    local: {},
+  });
+}
+
+/** Three-commit demo history shared by the history-reading problems. */
+const DEMO_COMMITS = [
+  { id: "a1b2c3d", message: "Start the project", time: 1727769600000, files: { "app.py": HELLO_V1, "README.md": README_V1 } },
+  { id: "b4c5d6e", message: "Add a goodbye line", time: 1727856000000, files: { "app.py": HELLO_V2, "README.md": README_V1 } },
+  { id: "c7d8e9f", message: "Expand the readme", time: 1727942400000, files: { "app.py": HELLO_V2, "README.md": README_V2 } },
+];
+
+const GIT_DEMO_FIXTURE = gitFixture(DEMO_COMMITS);
+
+/** Shared fs for the history-reading problems: the demo repo, working tree clean. */
+const GIT_DEMO_FS = {
+  dirs: ["/home/student/project"],
+  files: [
+    { path: "/home/student/project/app.py", content: HELLO_V2 },
+    { path: "/home/student/project/README.md", content: README_V2 },
+    { path: "/home/student/project/.git", content: GIT_DEMO_FIXTURE },
+  ],
+  home: "/home/student/project",
+  user: "student",
+};
+
+/** One-commit repo with an unstaged edit and an untracked file (status practice). */
+const GIT_STATUS_FIXTURE = gitFixture([
+  { id: "a1b2c3d", message: "Start the project", time: 1727769600000, files: { "app.py": HELLO_V1, "README.md": README_V1 } },
+]);
+
+/** One-commit repo with README already staged and an unstaged app.py edit. */
+const GIT_STAGED_FIXTURE = gitFixture(
+  [{ id: "d1e2f3a", message: "First draft", time: 1727769600000, files: { "app.py": HELLO_V1, "README.md": README_V1 } }],
+  { "README.md": "# Demo\n\nDraft notes.\n" }
+);
+
+/** One-commit repo with a tracked edit plus an untracked file (commit -a practice). */
+const GIT_AM_FIXTURE = gitFixture([
+  { id: "e4f5a6b", message: "First draft", time: 1727769600000, files: { "app.py": HELLO_V1 } },
+]);
+
+/** One-commit repo with three tracked files awaiting rm / rm --cached / mv. */
+const GIT_RM_FIXTURE = gitFixture([
+  { id: "f0a1b2c", message: "First draft", time: 1727769600000, files: { "app.py": HELLO_V1, "temp.log": "debug line\n", "draft.txt": "v1\n" } },
+]);
 
 const rawProblems = [
   {
@@ -1291,6 +1364,853 @@ const rawProblems = [
     ],
   },
   {
+    id: "git-first-commit",
+    title: "Your First Git Commit",
+    difficulty: "medium" as const,
+    tags: ["git", "config", "init", "add", "commit", "log"],
+    brief:
+      "Git remembers who you are, then remembers everything you tell it to. Set your identity, turn the project folder into a repository, stage your files, make the first commit, and read the history back — the one-time setup from the Git setup guide, put into practice.",
+    fs: {
+      dirs: ["/home/student/project"],
+      files: [
+        { path: "/home/student/project/hello.py", content: "print('hello, git')\n" },
+        { path: "/home/student/project/README.md", content: "# My first repo\n\nLearning Git, one commit at a time.\n" },
+      ],
+      home: "/home/student",
+      user: "student",
+    },
+    steps: [
+      {
+        id: "s1",
+        prompt:
+          "Every commit is stamped with a name and email. Set yours globally: user.name to \"Ada Lovelace\" and user.email to ada@example.com. (Quotes matter — the name has a space.)",
+        hints: [
+          "git config --global user.name \"Ada Lovelace\" — the flag order is: command, --global, key, value.",
+          "Then the same shape for email: git config --global user.email ada@example.com. No quotes needed — no space.",
+        ],
+        marks: 6,
+        checks: [
+          { type: "fileExists" as const, path: "/home/student/.gitconfig", marks: 2 },
+          { type: "fileContains" as const, path: "/home/student/.gitconfig", value: "user.name = Ada Lovelace", marks: 2 },
+          { type: "fileContains" as const, path: "/home/student/.gitconfig", value: "user.email = ada@example.com", marks: 2 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt:
+          "Print every setting Git knows so far. Somewhere in the list you should see the name and email you just chose — this is the command to reach for whenever commits show the wrong identity.",
+        hints: ["git config --list — the last value shown for a key is the one that wins."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "user.name=Ada Lovelace", marks: 2 },
+          { type: "outputContains" as const, value: "user.email=ada@example.com", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt:
+          "Name the first branch 'main' for every future repository, then cd into project and turn it into a repository with git init.",
+        hints: [
+          "git config --global init.defaultBranch main — this affects new repositories only; it never renames existing branches.",
+          "git init inside project/ creates the hidden .git/ entry that makes the folder a repository. Run it once per project.",
+        ],
+        marks: 6,
+        checks: [
+          { type: "fileExists" as const, path: "/home/student/project/.git", marks: 2 },
+          { type: "outputContains" as const, value: "Initialized empty Git repository", marks: 2 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 2 },
+        ],
+      },
+      {
+        id: "s4",
+        prompt:
+          "Ask the repository where things stand: git status. Nothing is tracked yet — hello.py and README.md should be listed as untracked.",
+        hints: [
+          "git status is the first thing to run whenever git feels confusing.",
+          "Expect an 'Untracked files:' section naming hello.py and README.md, plus 'No commits yet'.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Untracked files:", marks: 2 },
+          { type: "outputContains" as const, value: "hello.py", marks: 1 },
+          { type: "outputContains" as const, value: "No commits yet", marks: 1 },
+        ],
+      },
+      {
+        id: "s5",
+        prompt:
+          "Stage both files for the first commit — one command, from inside project — then confirm with git status: they should appear under 'Changes to be committed:'.",
+        hints: [
+          "git add hello.py README.md stages both, or git add . stages everything in the repository at once.",
+          "Staging builds the snapshot you are about to commit — it does not save history yet. git status shows it as 'new file'.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "commandUsed" as const, commands: ["git"], marks: 2 },
+          { type: "outputContains" as const, value: "Changes to be committed:", marks: 1 },
+          { type: "outputContains" as const, value: "new file:", marks: 1 },
+        ],
+      },
+      {
+        id: "s6",
+        prompt:
+          "Commit the staged snapshot with the message: First commit. git commit -m \"First commit\" — then status should say the working tree is clean.",
+        hints: [
+          "The -m flag attaches the message; without it git refuses to commit.",
+          "Commit messages say what and why: 'Fix login redirect', not 'changes'.",
+        ],
+        marks: 6,
+        checks: [
+          { type: "outputContains" as const, value: "(root-commit)", marks: 2 },
+          { type: "outputContains" as const, value: "First commit", marks: 2 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 2 },
+        ],
+      },
+      {
+        id: "s7",
+        prompt:
+          "Prove the commit exists: git log should show the commit id, the author line \"Ada Lovelace <ada@example.com>\" — the identity you configured in step 1 — and the message.",
+        hints: [
+          "git log lists commits newest first; each entry has commit <id>, Author:, Date: and the message.",
+        ],
+        marks: 6,
+        checks: [
+          { type: "outputContains" as const, value: "Author: Ada Lovelace <ada@example.com>", marks: 3 },
+          { type: "outputContains" as const, value: "commit ", marks: 2 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s8",
+        prompt:
+          "The satisfying end to a first commit: one last git status. It should say 'nothing to commit, working tree clean'.",
+        hints: [
+          "Same command as step 4 — but now nothing is untracked and nothing is staged. That's what a clean tree looks like.",
+        ],
+        marks: 3,
+        checks: [
+          { type: "outputContains" as const, value: "nothing to commit, working tree clean", marks: 2 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-setup-drill",
+    title: "Once Per Machine",
+    difficulty: "easy" as const,
+    tags: ["git", "config", "setup"],
+    brief:
+      "The Setup section of the cheat sheet, made muscle memory: tell Git who you are and what the first branch should be called — then read the settings back with --list.",
+    fs: { dirs: ["/home/student"], files: [], home: "/home/student", user: "student" },
+    steps: [
+      {
+        id: "s1",
+        prompt:
+          "Set your global Git identity: user.name to \"Grace Hopper\". (Quotes matter — the name has a space.)",
+        hints: [
+          "git config --global user.name \"Grace Hopper\" — the order is: command, --global, key, value.",
+          "This lands in ~/.gitconfig, the file Git reads on every machine it's set up on — hence 'once per machine'.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "fileExists" as const, path: "/home/student/.gitconfig", marks: 2 },
+          { type: "fileContains" as const, path: "/home/student/.gitconfig", value: "user.name = Grace Hopper", marks: 2 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt: "Now the email: user.email to grace@example.com.",
+        hints: ["Same shape as the name: git config --global user.email grace@example.com. No quotes needed — no space."],
+        marks: 4,
+        checks: [
+          { type: "fileContains" as const, path: "/home/student/.gitconfig", value: "user.email = grace@example.com", marks: 4 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt:
+          "Name the first branch of every future repository 'main': set init.defaultBranch to main.",
+        hints: [
+          "git config --global init.defaultBranch main — it affects new repositories only, never existing branches.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "fileContains" as const, path: "/home/student/.gitconfig", value: "init.defaultBranch = main", marks: 4 },
+        ],
+      },
+      {
+        id: "s4",
+        prompt:
+          "Read it all back: git config --list should show all three settings you just chose.",
+        hints: [
+          "--list prints every setting Git knows, one per line as key=value. Whenever commits show the wrong identity, this is the command to run.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "user.name=Grace Hopper", marks: 2 },
+          { type: "outputContains" as const, value: "user.email=grace@example.com", marks: 1 },
+          { type: "outputContains" as const, value: "init.defaultBranch=main", marks: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-init-branch",
+    title: "Pick Your First Branch",
+    difficulty: "easy" as const,
+    tags: ["git", "init", "status"],
+    brief:
+      "Turn a plain folder into a repository — the 'Start and check' section in action. Choose the starting branch with git init -b, then check where you stand with git status.",
+    fs: {
+      dirs: ["/home/student/project"],
+      files: [{ path: "/home/student/project/notes.txt", content: "project ideas\n" }],
+      home: "/home/student",
+      user: "student",
+    },
+    steps: [
+      {
+        id: "s1",
+        prompt: "Walk into the project folder: cd project.",
+        hints: ["The folder lives right in your home directory. git init works on the CURRENT folder, so be inside project first."],
+        marks: 4,
+        checks: [{ type: "cwdEquals" as const, path: "/home/student/project", marks: 4 }],
+      },
+      {
+        id: "s2",
+        prompt:
+          "Turn this folder into a repository whose first branch is called main: git init -b main.",
+        hints: [
+          "-b names the starting branch, overriding init.defaultBranch for this one repository.",
+          "The hidden .git entry it creates is what makes the folder a repository — run it once per project.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Initialized empty Git repository", marks: 3 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt:
+          "Check where you stand: git status. Which branch are you on, and what does Git say about notes.txt?",
+        hints: [
+          "Expect 'On branch main', 'No commits yet', and notes.txt listed as untracked — Git sees it but isn't tracking it yet.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "On branch main", marks: 2 },
+          { type: "outputContains" as const, value: "No commits yet", marks: 1 },
+          { type: "outputContains" as const, value: "notes.txt", marks: 1 },
+        ],
+      },
+      {
+        id: "s4",
+        prompt:
+          "Run git init a second time. Does it wipe anything? Read the message.",
+        hints: [
+          "Initializing an existing repository is safe: Git reinitializes and leaves everything exactly as it was.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Reinitialized existing Git repository", marks: 4 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-status-short",
+    title: "Status at a Glance",
+    difficulty: "easy" as const,
+    tags: ["git", "status", "add"],
+    brief:
+      "git status is verbose; git status -s is the terse version pros type all day. Learn to read both: an edit sitting unstaged, a fresh untracked file, then stage the edit and watch the letters move.",
+    fs: {
+      dirs: ["/home/student/project"],
+      files: [
+        { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" },
+        { path: "/home/student/project/README.md", content: "# Demo\n" },
+        { path: "/home/student/project/todo.txt", content: "buy milk\n" },
+        { path: "/home/student/project/.git", content: "__GIT_STATUS__" },
+      ],
+      home: "/home/student/project",
+      user: "student",
+    },
+    steps: [
+      {
+        id: "s1",
+        prompt:
+          "Ask the repository where things stand: git status. One file is modified but not staged, one is untracked — find both sections.",
+        hints: [
+          "app.py was edited after the last commit, so it sits under 'Changes not staged for commit:'.",
+          "todo.txt is brand new — Git lists it under 'Untracked files:'.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Changes not staged for commit:", marks: 2 },
+          { type: "outputContains" as const, value: "modified:   app.py", marks: 1 },
+          { type: "outputContains" as const, value: "Untracked files:", marks: 1 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt:
+          "Now the short form: git status -s. Two letters per file. Which pair of letters marks app.py, and which marks todo.txt?",
+        hints: [
+          "' M' (blank then M) means modified but not staged; '??' means untracked.",
+          "The first letter column is the staging area, the second is the working directory.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: " M app.py", marks: 2 },
+          { type: "outputContains" as const, value: "?? todo.txt", marks: 2 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt:
+          "Stage the edit with git add app.py, then run git status -s again. The M jumped to the first column — it's ready for the next commit.",
+        hints: [
+          "After staging, the line reads 'M  app.py': M in the staging column, blank in the working column.",
+          "todo.txt keeps its ?? — git add . would take it too, but you staged only app.py.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "M  app.py", marks: 3 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-log-formats",
+    title: "Three Ways to Log",
+    difficulty: "easy" as const,
+    tags: ["git", "log", "history"],
+    brief:
+      "A repository with three commits is waiting. Read its history three ways from the cheat sheet's History section: full git log, the one-line digest, and -n to limit how far back you go.",
+    fs: { dirs: ["/home/student/project"], files: [{ path: "/home/student/project/.git", content: "__GIT_DEMO__" }, { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" }, { path: "/home/student/project/README.md", content: "# Demo\n\nLearning git.\n" }], home: "/home/student/project", user: "student" },
+    steps: [
+      {
+        id: "s1",
+        prompt:
+          "Read the whole history: git log. Newest commit first — what's the id and message of the latest one?",
+        hints: [
+          "Each entry shows commit <id>, Author:, Date:, then the message indented by four spaces.",
+          "The newest commit here is 'Expand the readme'.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "c7d8e9f", marks: 2 },
+          { type: "outputContains" as const, value: "Expand the readme", marks: 2 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt:
+          "Same history, one line per commit: git log --oneline.",
+        hints: ["--oneline collapses each commit to '<id> <message>' — the shape you'll scan in a real terminal."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "c7d8e9f Expand the readme", marks: 2 },
+          { type: "outputContains" as const, value: "a1b2c3d Start the project", marks: 2 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt:
+          "Only the recent past: show the last 2 commits with git log --oneline -n 2.",
+        hints: ["-n <number> limits how many commits you see. The oldest one should disappear from the list."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "b4c5d6e Add a goodbye line", marks: 2 },
+          { type: "commandUsedWithFlag" as const, command: "git", flag: "-n", marks: 2 },
+        ],
+      },
+      {
+        id: "s4",
+        prompt:
+          "Full detail, newest commit only: git log -n 1.",
+        hints: ["Without --oneline you get the full entry again — id, author, date, message — but just one of them."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "c7d8e9f", marks: 2 },
+          { type: "outputContains" as const, value: "Author: Ada Lovelace <ada@example.com>", marks: 1 },
+          { type: "outputContains" as const, value: "Expand the readme", marks: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-log-stat",
+    title: "Who Touched What",
+    difficulty: "medium" as const,
+    tags: ["git", "log", "history", "pipes", "wc"],
+    brief:
+      "History with numbers: --stat appends a per-file tally to every commit. Combine it with the pipes you already know — wc -l to count commits, grep to find the one about the readme.",
+    fs: { dirs: ["/home/student/project"], files: [{ path: "/home/student/project/.git", content: "__GIT_DEMO__" }, { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" }, { path: "/home/student/project/README.md", content: "# Demo\n\nLearning git.\n" }], home: "/home/student/project", user: "student" },
+    steps: [
+      {
+        id: "s1",
+        prompt:
+          "Show each commit with its file tally: git log --stat. Which commit touched README.md by two lines?",
+        hints: [
+          "Each entry gains rows like ' README.md | 2 ++' plus a 'N files changed, X insertions(+), Y deletions(-)' summary.",
+          "The newest commit is the one that expanded the readme.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "README.md | 2 ++", marks: 2 },
+          { type: "outputContains" as const, value: "1 file changed, 1 insertion(+), 0 deletions(-)", marks: 2 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt:
+          "How many commits does this history have? One pipeline: git log --oneline piped into wc -l.",
+        hints: ["git log --oneline | wc -l — each commit is one line, so counting lines counts commits."],
+        marks: 4,
+        checks: [
+          { type: "outputEquals" as const, value: "3", marks: 3 },
+          { type: "commandUsed" as const, commands: ["wc"], marks: 1 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt:
+          "Find the commit about the readme: pipe git log --oneline into grep readme.",
+        hints: ["git log --oneline | grep readme — grep filters the one-line entries for the word."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Expand the readme", marks: 2 },
+          { type: "outputContains" as const, value: "c7d8e9f", marks: 1 },
+          { type: "commandUsed" as const, commands: ["grep"], marks: 1 },
+        ],
+      },
+      {
+id: "s4",
+        prompt:
+          "The two most recent commits, with their tallies: git log --stat -n 2.",
+        hints: ["Flags combine freely: --stat for the numbers, -n 2 to stop after two commits."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "app.py | 1 +", marks: 2 },
+          { type: "outputContains" as const, value: "README.md | 2 ++", marks: 1 },
+          { type: "commandUsedWithFlag" as const, command: "git", flag: "-n", marks: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-show-patch",
+    title: "Read the Patch",
+    difficulty: "medium" as const,
+    tags: ["git", "show", "log", "history", "diff"],
+    brief:
+      "Commits carry their own diffs. git show prints one commit with its patch; git log -p prints every commit with theirs. Learn to read the '-' and '+' lines — that skill is the whole History section's punchline.",
+    fs: { dirs: ["/home/student/project"], files: [{ path: "/home/student/project/.git", content: "__GIT_DEMO__" }, { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" }, { path: "/home/student/project/README.md", content: "# Demo\n\nLearning git.\n" }], home: "/home/student/project", user: "student" },
+    steps: [
+      {
+        id: "s1",
+        prompt:
+          "Inspect the latest commit: git show HEAD. Which file changed, and what line did it gain?",
+        hints: [
+          "HEAD means 'the newest commit'. The output is the commit header followed by its patch.",
+          "Patch lines start with '-' (removed) or '+' (added); context lines start with a space.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "diff --git a/README.md b/README.md", marks: 2 },
+          { type: "outputContains" as const, value: "+Learning git.", marks: 2 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt:
+          "One step back: git show HEAD~1 (or git show b4c5d6e). What did THAT commit add?",
+        hints: [
+          "HEAD~1 is the commit before HEAD; a few characters of the id work too.",
+          "Look for the line that was added to app.py.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "+print(\"goodbye\")", marks: 3 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+      id: "s3",
+        prompt:
+          "Every patch at once: git log -p. Scroll mentally through all three commits — the first one created files from nothing.",
+        hints: [
+          "-p attaches the patch to every entry in the log.",
+          "Brand-new files appear with 'new file mode 100644' and everything as '+' lines.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "new file mode 100644", marks: 2 },
+          { type: "outputContains" as const, value: "+Learning git.", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s4",
+        prompt:
+          "The very first commit: git show a1b2c3d. Both files were born here.",
+        hints: ["With no parent commit, the whole tree shows as additions — '--- /dev/null' means 'did not exist before'."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "new file mode 100644", marks: 2 },
+          { type: "outputContains" as const, value: "+print(\"hello\")", marks: 2 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-diff-staged",
+    title: "Before You Commit",
+    difficulty: "medium" as const,
+    tags: ["git", "diff", "add", "stage"],
+    brief:
+      "The Compare section's most useful habit: git diff shows changes you haven't staged yet, git diff --staged shows what the next commit will contain. This repo has one of each — tell them apart, then stage the straggler.",
+    fs: {
+      dirs: ["/home/student/project"],
+      files: [
+        { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" },
+        { path: "/home/student/project/README.md", content: "# Demo\n\nDraft notes.\n" },
+        { path: "/home/student/project/.git", content: "__GIT_STAGED__" },
+      ],
+      home: "/home/student/project",
+      user: "student",
+    },
+    steps: [
+      {
+        id: "s1",
+        prompt:
+          "Survey first: git status. One file is staged for the next commit, a different file is edited but not staged.",
+        hints: [
+          "README.md is under 'Changes to be committed:'; app.py is under 'Changes not staged for commit:'.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Changes to be committed:", marks: 1 },
+          { type: "outputContains" as const, value: "modified:   README.md", marks: 1 },
+          { type: "outputContains" as const, value: "Changes not staged for commit:", marks: 1 },
+          { type: "outputContains" as const, value: "modified:   app.py", marks: 1 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt:
+          "What have you NOT staged yet? git diff compares the working directory against the staging area.",
+        hints: [
+          "Plain git diff only shows unstaged work — here that's the app.py edit.",
+          "The '+' line is the goodbye line you added.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "+print(\"goodbye\")", marks: 3 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt:
+          "And what WILL the next commit contain? git diff --staged compares the staging area against the last commit.",
+        hints: [
+          "--staged (or --cached) flips the comparison: staging area vs HEAD.",
+          "Here that's the README.md draft notes.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "+Draft notes.", marks: 3 },
+          { type: "commandUsedWithFlag" as const, command: "git", flag: "--staged", marks: 1 },
+        ],
+      },
+      {
+        id: "s4",
+        prompt:
+          "Stage the app.py edit too (git add app.py), then run git status — everything is now waiting in the staging area.",
+        hints: [
+          "After staging, both files sit under 'Changes to be committed:' and the working tree has no unstaged edits.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Changes to be committed:", marks: 1 },
+          { type: "outputContains" as const, value: "modified:   app.py", marks: 1 },
+          { type: "outputContains" as const, value: "modified:   README.md", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-diff-commits",
+    title: "Then vs Now",
+    difficulty: "medium" as const,
+    tags: ["git", "diff", "history", "pipes", "wc"],
+    brief:
+      "git diff takes commit ids: two of them compares then vs now, and order matters — swap them and every '+' becomes a '-'. Then count the changed lines by piping into wc -l.",
+    fs: { dirs: ["/home/student/project"], files: [{ path: "/home/student/project/.git", content: "__GIT_DEMO__" }, { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" }, { path: "/home/student/project/README.md", content: "# Demo\n\nLearning git.\n" }], home: "/home/student/project", user: "student" },
+    steps: [
+      {
+        id: "s1",
+        prompt:
+          "What changed between the first commit and the last? git diff a1b2c3d c7d8e9f — old first, new second.",
+        hints: [
+          "Both files changed: app.py gained a goodbye, README.md gained a note.",
+          "Diff order is '<from> <to>': lines present in c7d8e9f but not a1b2c3d show as '+'.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "+print(\"goodbye\")", marks: 2 },
+          { type: "outputContains" as const, value: "+Learning git.", marks: 2 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt:
+          "Now backwards: git diff c7d8e9f a1b2c3d. Read the same two files — every plus turned into a minus.",
+        hints: ["Reversing the arguments asks 'what would I lose by going back?' — the answer shows as '-' lines."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "-print(\"goodbye\")", marks: 2 },
+          { type: "outputContains" as const, value: "-Learning git.", marks: 2 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt:
+          "Count the diff's lines in one pipeline: git diff a1b2c3d c7d8e9f piped into wc -l.",
+        hints: [
+          "Headers, hunk markers and context lines all count as lines — that's the point: a diff is just text.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputEquals" as const, value: "14", marks: 3 },
+          { type: "commandUsed" as const, commands: ["wc"], marks: 1 },
+        ],
+      },
+      {
+        id: "s4",
+        prompt:
+          "Short form: git diff a1b2c3d with ONE commit compares that commit against the current state of your working directory.",
+        hints: ["With a single ref, the second side is 'right now'. The working tree here matches the newest commit, so the output matches step 1."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "+print(\"goodbye\")", marks: 2 },
+          { type: "outputContains" as const, value: "+Learning git.", marks: 2 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-commit-am",
+    title: "Skip a Step (Carefully)",
+    difficulty: "medium" as const,
+    tags: ["git", "commit", "add", "status"],
+    brief:
+      "git commit -am bundles 'stage tracked edits' and 'commit' into one command — but only for files Git already tracks. A brand-new file slips through the net. Prove it.",
+    fs: {
+      dirs: ["/home/student/project"],
+      files: [
+        { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" },
+        { path: "/home/student/project/notes.txt", content: "meeting at noon\n" },
+        { path: "/home/student/project/.git", content: "__GIT_AM__" },
+      ],
+      home: "/home/student/project",
+      user: "student",
+    },
+    steps: [
+      {
+        id: "s1",
+        prompt:
+          "Survey: git status. Two things await: a tracked edit (app.py) and an untracked file (notes.txt).",
+        hints: [
+          "app.py sits under 'Changes not staged for commit:'; notes.txt is untracked.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Changes not staged for commit:", marks: 2 },
+          { type: "outputContains" as const, value: "Untracked files:", marks: 1 },
+          { type: "outputContains" as const, value: "notes.txt", marks: 1 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt:
+          "One command for the edit: git commit -am \"Add goodbye line\". The -a stages tracked changes before committing.",
+        hints: [
+          "-am = -a + -m: stage tracked edits, then commit with the message.",
+          "Watch the summary line: how many files changed?",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "1 file changed", marks: 2 },
+          { type: "outputContains" as const, value: "Add goodbye line", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt:
+          "git status again. notes.txt is STILL untracked — -a never touches files Git doesn't know yet.",
+        hints: [
+          "The commit -a shortcut only covers edits and deletions of already-tracked files.",
+          "New files always need an explicit git add first — this is the gotcha the cheat sheet warns about.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Untracked files:", marks: 2 },
+          { type: "outputContains" as const, value: "notes.txt", marks: 2 },
+        ],
+      },
+      {
+        id: "s4",
+        prompt:
+          "Give notes.txt the full treatment: git add notes.txt, then git commit -m \"Add meeting notes\".",
+        hints: [
+          "The commit output should mention 'create mode 100644 notes.txt' — the file just became part of history.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "create mode 100644 notes.txt", marks: 3 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s5",
+        prompt:
+          "Admire the result: git log --oneline should list three commits, newest first.",
+        hints: ["'Add meeting notes', then 'Add goodbye line', then 'First draft'."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Add meeting notes", marks: 2 },
+          { type: "outputContains" as const, value: "Add goodbye line", marks: 1 },
+          { type: "outputContains" as const, value: "First draft", marks: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-rm-mv",
+    title: "Untrack, Remove, Rename",
+    difficulty: "hard" as const,
+    tags: ["git", "rm", "mv", "add", "commit", "status"],
+    brief:
+      "The Remove-and-rename section, all of it: git mv renames a tracked file, git rm deletes one, and git rm --cached just stops tracking it while leaving the file on your disk. Three verbs, three different leftovers — track what happens to the files AND to history.",
+    fs: {
+      dirs: ["/home/student/project"],
+      files: [
+        { path: "/home/student/project/app.py", content: "print(\"hello\")\n" },
+        { path: "/home/student/project/temp.log", content: "debug line\n" },
+        { path: "/home/student/project/draft.txt", content: "v1\n" },
+        { path: "/home/student/project/.git", content: "__GIT_RM__" },
+      ],
+      home: "/home/student/project",
+      user: "student",
+    },
+    steps: [
+      {
+        id: "s1",
+        prompt:
+          "Rename a tracked file the Git way: git mv draft.txt notes.txt, then git status. Notice both sides of the rename in the staging area.",
+        hints: [
+          "git mv renames on disk AND stages the change — no separate git add needed.",
+          "Status shows it as a 'new file' plus a 'deleted' file: a rename records as remove-old + add-new.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "new file:   notes.txt", marks: 2 },
+          { type: "outputContains" as const, value: "deleted:    draft.txt", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt:
+          "Record the rename: git commit -m \"Rename draft to notes\".",
+        hints: [
+          "The output lists one 'create mode' and one 'delete mode' — the two halves of the rename.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "create mode 100644 notes.txt", marks: 2 },
+          { type: "outputContains" as const, value: "delete mode 100644 draft.txt", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt:
+          "Delete for real: git rm temp.log, then git status. The file is gone from disk AND staged for removal.",
+        hints: [
+          "git rm = delete the file + stage the deletion, ready for the next commit.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "deleted:    temp.log", marks: 2 },
+          { type: "fileAbsent" as const, path: "/home/student/project/temp.log", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s4",
+        prompt:
+          "Commit the deletion: git commit -m \"Remove debug log\".",
+        hints: ["The output should include 'delete mode 100644 temp.log' — history now records the file's death."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "delete mode 100644 temp.log", marks: 3 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s5",
+        prompt:
+          "Now the subtle one: git rm --cached notes.txt, then git status. The file vanished from the staging area — but is it gone from your disk?",
+        hints: [
+          "--cached removes it from Git's tracking only — the file itself stays on disk.",
+          "Status tells the story twice: 'deleted: notes.txt' staged, AND notes.txt listed as untracked — Git forgot it, your disk didn't.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "deleted:    notes.txt", marks: 2 },
+          { type: "fileExists" as const, path: "/home/student/project/notes.txt", marks: 1 },
+          { type: "outputContains" as const, value: "Untracked files:", marks: 1 },
+        ],
+      },
+      {
+        id: "s6",
+        prompt:
+          "Make the untracking official: git commit -m \"Stop tracking notes\".",
+        hints: [
+          "The commit records the removal from the repository; the file on disk is untouched.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "delete mode 100644 notes.txt", marks: 3 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s7",
+        prompt:
+          "Final check: git status one more time. notes.txt is untracked but still on disk — exactly what --cached promises.",
+        hints: [
+          "Run ls if you want extra proof the file survived.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Untracked files:", marks: 2 },
+          { type: "outputContains" as const, value: "notes.txt", marks: 1 },
+          { type: "fileExists" as const, path: "/home/student/project/notes.txt", marks: 1 },
+        ],
+      },
+    ],
+  },
+  {
     id: "boss-project",
     title: "Boss Challenge: Ship the Project",
     difficulty: "hard" as const,
@@ -1370,4 +2290,16 @@ export const LAUNCH_PROBLEMS: Problem[] = rawProblems.map((p) => problemSchema.p
 
 export function getLaunchProblem(id: string): Problem | undefined {
   return LAUNCH_PROBLEMS.find((p) => p.id === id);
+}
+
+/**
+ * Tags that mark a problem as Git practice. The /git-problems page filters
+ * on these, so any future problem that carries one of them shows up there
+ * automatically — no per-page list to maintain.
+ */
+export const GIT_PROBLEM_TAGS = ["git", "config", "init", "add", "commit", "log", "branch", "remote"] as const;
+
+/** Problems tagged for Git practice, in launch order. */
+export function gitProblems(): Problem[] {
+  return LAUNCH_PROBLEMS.filter((p) => p.tags.some((t) => (GIT_PROBLEM_TAGS as readonly string[]).includes(t)));
 }
