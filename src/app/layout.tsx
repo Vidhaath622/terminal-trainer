@@ -1,21 +1,44 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { IBM_Plex_Mono, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
-const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
-const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-display", display: "swap" });
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+const sourceSerif = Source_Serif_4({
+  subsets: ["latin"],
+  weight: ["400", "600"],
+  variable: "--font-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "Terminal Trainer — graded Linux practice",
+  title: "Terminal Trainer: graded Linux practice",
   description:
-    "Practice Linux terminal commands with graded, step-by-step problems. Built for first-year CS students; embeds into any college website.",
+    "Practice Linux terminal commands in a simulated shell with graded, step-by-step problems. Built for first-year CS students; embeds into any college website.",
+  openGraph: {
+    title: "Terminal Trainer: graded Linux practice",
+    description:
+      "Practice Linux terminal commands in a simulated shell with graded, step-by-step problems.",
+    type: "website",
+    siteName: "Terminal Trainer",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Terminal Trainer: graded Linux practice",
+    description:
+      "Practice Linux terminal commands in a simulated shell with graded, step-by-step problems.",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrains.variable} ${spaceGrotesk.variable}`}>
-      <body className="bg-term-bg font-sans text-term-text min-h-screen antialiased">{children}</body>
+    <html lang="en" className={`${plexMono.variable} ${sourceSerif.variable}`}>
+      <body className="min-h-screen bg-term-bg font-sans text-term-text antialiased">{children}</body>
     </html>
   );
 }

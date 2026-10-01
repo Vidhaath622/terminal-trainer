@@ -40,8 +40,8 @@ export interface ProblemPlayerProps {
 function marksColor(earned: number, max: number): string {
   const pct = max === 0 ? 0 : Math.round((earned / max) * 100);
   if (pct === 100) return "text-term-green";
-  if (pct >= 50) return "text-term-yellow";
-  return "text-term-text";
+  if (pct >= 50) return "text-term-text";
+  return "text-term-muted";
 }
 
 /** Fresh or restored session for the given problem (used on mount and on exit-practice). */
@@ -57,11 +57,9 @@ function createInitialSession(
 }
 
 const COMPLETE_BANNER_CLASS =
-  "relative mt-3 animate-slideUp overflow-hidden rounded-lg border border-term-green/50 bg-term-green/10 p-3 text-xs font-medium text-term-green shadow-glow";
-const COMPLETE_SHIMMER_CLASS =
-  "animate-shimmer absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent bg-[length:200%_100%]";
+  "mt-3 rounded border border-term-green/50 bg-term-green/10 p-3 text-xs font-medium text-term-green";
 const PRACTICE_BANNER_CLASS =
-  "relative mt-3 animate-slideUp overflow-hidden rounded-lg border border-term-blue/50 bg-term-blue/10 p-3 text-xs font-medium text-term-blue shadow-glow-blue";
+  "mt-3 rounded border border-term-border bg-term-panel p-3 text-xs font-medium text-term-text";
 
 export default function ProblemPlayer({
   problem,
@@ -87,7 +85,6 @@ export default function ProblemPlayer({
   const savedBlobRef = useRef<string | null>(null);
   // Mirrored for the session listener below (stable closure, no re-subscribe).
   const practiceRef = useRef(false);
-  practiceRef.current = practice;
   const eventRef = useRef(onEvent);
   eventRef.current = onEvent;
   const progressCbRef = useRef(onProgressChange);
@@ -163,25 +160,25 @@ export default function ProblemPlayer({
   return (
     <div className="flex h-full flex-col">
       {/* score bar */}
-      <div className={`glass relative z-10 flex items-center justify-between gap-4 border-b border-term-border px-4 py-2 ${compact ? "py-1.5" : ""}`}>
+      <div className={`relative z-10 flex items-center justify-between gap-4 border-b border-term-border bg-term-panel px-4 py-2 ${compact ? "py-1.5" : ""}`}>
         <div className="flex min-w-0 items-center gap-3">
           {!compact && (
             <Link
               href="/"
               aria-label="Back to home page"
               title="Back to home page"
-              className="shine shrink-0 rounded-lg border border-term-border bg-term-raise/60 px-2.5 py-1.5 text-xs font-medium text-term-muted transition hover:border-term-blue/60 hover:text-term-blue"
+              className="shrink-0 rounded border border-term-border bg-term-raise/60 px-2.5 py-1.5 font-mono text-xs font-medium text-term-muted hover:border-term-green/60"
               data-testid="back-btn"
             >
-              ← Back
+              Back
             </Link>
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="truncate text-sm font-semibold">{problem.title}</h1>
+              <h1 className="truncate text-sm font-semibold text-term-text">{problem.title}</h1>
               {practice && (
                 <span
-                  className="shrink-0 rounded-full border border-term-blue/50 bg-term-blue/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-term-blue"
+                  className="shrink-0 rounded border border-term-border bg-term-raise px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-term-text"
                   data-testid="practice-pill"
                   title="Practice round — your saved score is safe"
                 >
@@ -189,7 +186,9 @@ export default function ProblemPlayer({
                 </span>
               )}
             </div>
-            <p className="text-xs capitalize tracking-wide text-term-muted">{problem.difficulty} · {problem.steps.length} steps</p>
+            <p className="font-mono text-xs capitalize text-term-muted">
+              {problem.difficulty}, {problem.steps.length} steps
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -199,27 +198,17 @@ export default function ProblemPlayer({
               {session.earned} <span className="text-term-muted">/ {totalMax}</span>
             </div>
             {/* progress bar */}
-            <div className="relative mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-term-border">
+            <div className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-term-border">
               <div
-                className={`h-full rounded-full transition-all duration-700 ease-out ${
-                  pct === 100
-                    ? "bg-gradient-to-r from-term-green to-emerald-300 shadow-glow"
-                    : "bg-gradient-to-r from-term-blue to-cyan-300"
-                }`}
+                className={`h-full rounded-full ${pct === 100 ? "bg-term-green" : "bg-term-text/60"}`}
                 style={{ width: `${pct}%` }}
                 data-testid="progress-fill"
               />
-              {pct > 0 && pct < 100 && (
-                <div
-                  className="pointer-events-none absolute top-0 h-full w-6 animate-shimmer bg-gradient-to-r from-transparent via-white/25 to-transparent"
-                  style={{ left: `max(0px, calc(${pct}% - 24px))` }}
-                />
-              )}
             </div>
           </div>
           <button
             onClick={handleReset}
-            className="shine rounded-lg border border-term-border bg-term-raise/60 px-2.5 py-1.5 text-xs font-medium text-term-muted transition hover:border-term-red/50 hover:text-term-red"
+            className="rounded border border-term-border bg-term-raise/60 px-2.5 py-1.5 font-mono text-xs font-medium text-term-muted hover:border-term-red/50 hover:text-term-red"
             data-testid="reset-btn"
           >
             Reset
@@ -228,7 +217,8 @@ export default function ProblemPlayer({
       </div>
 
       <div className="flex min-h-0 flex-1">
-        {/* step sidebar */}        <aside className="w-72 shrink-0 overflow-y-auto border-r border-term-border bg-term-panel/70 p-3 sm:w-80">
+        {/* step sidebar */}
+        <aside className="w-72 shrink-0 overflow-y-auto border-r border-term-border bg-term-panel/70 p-3 sm:w-80">
           <ol className="space-y-2">
             {problem.steps.map((step, idx) => {
               const stepDone = idx < session.currentStepIndex;
@@ -236,29 +226,23 @@ export default function ProblemPlayer({
               return (
                 <li
                   key={step.id}
-                  className={`relative rounded-lg border p-2.5 text-xs transition-all duration-200 ${
+                  className={`rounded border p-2.5 text-xs ${
                     stepDone
                       ? "border-term-green/40 bg-term-green/10"
                       : current
-                        ? "border-term-blue/60 bg-term-blue/10 shadow-glow-blue"
-                        : "border-term-border opacity-60 hover:opacity-90 hover:border-term-muted/40"
+                        ? "border-term-green/60 bg-term-green/5"
+                        : "border-term-border opacity-60 hover:opacity-90"
                   }`}
                   data-testid={`step-${idx}`}
                 >
-                  {current && (
-                    <div
-                      aria-hidden
-                      className="pointer-events-none absolute inset-y-0 -left-3 w-[3px] rounded-full bg-gradient-to-b from-term-blue to-cyan-300 shadow-glow-blue"
-                    />
-                  )}
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 font-semibold">
                       <span
                         className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] ${
                           stepDone
-                            ? "bg-term-green text-term-bg shadow-glow"
+                            ? "bg-term-green text-term-bg"
                             : current
-                              ? "bg-term-blue text-term-bg shadow-glow-blue"
+                              ? "border border-term-green text-term-green"
                               : "border border-term-border text-term-muted"
                         }`}
                       >
@@ -272,14 +256,14 @@ export default function ProblemPlayer({
                   {current && step.hints.length > 0 && (
                     <div className="mt-1.5">
                       <button
-                        className="font-medium text-term-blue transition hover:underline"
+                        className="font-medium text-term-blue hover:underline"
                         onClick={() => setShowHints((v) => !v)}
                         data-testid="hints-btn"
                       >
                         {showHints ? "Hide hint" : "Show hint"}
                       </button>
                       {showHints && (
-                        <p className="mt-1.5 animate-fadeIn rounded border border-term-yellow/30 bg-term-yellow/10 p-1.5 italic text-term-yellow">
+                        <p className="mt-1.5 rounded border border-term-yellow/30 bg-term-yellow/10 p-1.5 text-term-yellow">
                           {step.hints[0]}
                         </p>
                       )}
@@ -296,59 +280,50 @@ export default function ProblemPlayer({
           )}
           {done && !practice && (
             <div className={COMPLETE_BANNER_CLASS} data-testid="complete-banner">
-              <div aria-hidden className={COMPLETE_SHIMMER_CLASS} />
-              <div className="relative">
-                <span>🎉 Problem complete — {session.earned}/{totalMax} marks!</span>
-                <button
-                  onClick={enterPractice}
-                  className="shine mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-term-green/20 px-3 py-2 text-xs font-bold text-term-green ring-1 ring-term-green/40 transition hover:bg-term-green/30 hover:shadow-glow"
-                  data-testid="practice-btn"
-                  title="Replay this problem in practice mode — your saved score is safe"
-                >
-                  🎯 Practice again
-                </button>
-              </div>
+              <span>Problem complete: {session.earned}/{totalMax} marks.</span>
+              <button
+                onClick={enterPractice}
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded bg-term-green/20 px-3 py-2 font-mono text-xs font-bold text-term-green ring-1 ring-term-green/40 hover:bg-term-green/30"
+                data-testid="practice-btn"
+                title="Replay this problem in practice mode — your saved score is safe"
+              >
+                Practice again
+              </button>
             </div>
           )}
           {practice && !done && (
             <div className={PRACTICE_BANNER_CLASS} data-testid="practice-banner">
-              <div aria-hidden className="animate-shimmer absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent bg-[length:200%_100%]" />
-              <div className="relative">
-                <span>🔁 Practice round — your saved score is safe.</span>
-                <button
-                  onClick={exitPractice}
-                  className="shine mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-term-blue/40 bg-term-blue/10 px-3 py-2 text-xs font-semibold transition hover:bg-term-blue/20"
-                  data-testid="exit-practice-btn"
-                  title="Return to your completed round"
-                >
-                  Exit practice
-                </button>
-              </div>
+              <span>Practice round — your saved score is safe.</span>
+              <button
+                onClick={exitPractice}
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded border border-term-border bg-term-raise/60 px-3 py-2 font-mono text-xs font-semibold text-term-text hover:border-term-green/60"
+                data-testid="exit-practice-btn"
+                title="Return to your completed round"
+              >
+                Exit practice
+              </button>
             </div>
           )}
           {done && practice && (
             <div className={COMPLETE_BANNER_CLASS} data-testid="complete-banner">
-              <div aria-hidden className={COMPLETE_SHIMMER_CLASS} />
-              <div className="relative">
-                <span>🎉 Problem complete — {session.earned}/{totalMax} marks!</span>
-                <span className="mt-1 block text-[10px] uppercase tracking-wider text-term-green/70">Practice round</span>
-                <button
-                  onClick={enterPractice}
-                  className="shine mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-term-green/20 px-3 py-2 text-xs font-bold text-term-green ring-1 ring-term-green/40 transition hover:bg-term-green/30 hover:shadow-glow"
-                  data-testid="practice-btn"
-                  title="Replay this problem in practice mode — your saved score is safe"
-                >
-                  🎯 Practice again
-                </button>
-                <button
-                  onClick={exitPractice}
-                  className="shine mt-1.5 flex w-full items-center justify-center rounded-lg border border-term-border bg-term-raise/60 px-3 py-1.5 text-xs font-medium text-term-muted transition hover:border-term-blue/60 hover:text-term-blue"
-                  data-testid="exit-practice-btn"
-                  title="Return to your earned round"
-                >
-                  Exit practice
-                </button>
-              </div>
+              <span>Problem complete: {session.earned}/{totalMax} marks.</span>
+              <span className="mt-1 block font-mono text-[10px] uppercase tracking-wider text-term-green/70">Practice round</span>
+              <button
+                onClick={enterPractice}
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded bg-term-green/20 px-3 py-2 font-mono text-xs font-bold text-term-green ring-1 ring-term-green/40 hover:bg-term-green/30"
+                data-testid="practice-btn"
+                title="Replay this problem in practice mode — your saved score is safe"
+              >
+                Practice again
+              </button>
+              <button
+                onClick={exitPractice}
+                className="mt-1.5 flex w-full items-center justify-center rounded border border-term-border bg-term-raise/60 px-3 py-1.5 font-mono text-xs font-medium text-term-muted hover:border-term-green/60"
+                data-testid="exit-practice-btn"
+                title="Return to your earned round"
+              >
+                Exit practice
+              </button>
             </div>
           )}
         </aside>
@@ -363,28 +338,27 @@ export default function ProblemPlayer({
               <button
                 onClick={handleVerify}
                 disabled={done}
-                className="shine rounded-lg bg-term-green/15 px-4 py-2 text-xs font-semibold text-term-green ring-1 ring-term-green/30 transition hover:bg-term-green/25 hover:shadow-glow disabled:opacity-40 disabled:ring-0"
+                className="rounded bg-term-green/15 px-4 py-2 font-mono text-xs font-semibold text-term-green ring-1 ring-term-green/30 hover:bg-term-green/25 disabled:opacity-40 disabled:ring-0"
                 data-testid="verify-btn"
               >
-                ⚡ Verify step {done ? "—" : currentIdx + 1}
+                Verify step {done ? "—" : currentIdx + 1}
               </button>
-              <span className="text-xs text-term-muted">
+              <span className="font-mono text-xs text-term-muted">
                 Step {Math.min(currentIdx + 1, problem.steps.length)} of {problem.steps.length}
               </span>
             </div>
             {grade && !done && (
-              <div className="mt-2.5 animate-fadeIn space-y-1" data-testid="verify-results">
+              <div className="mt-2.5 space-y-1" data-testid="verify-results">
                 <div className={`text-xs font-semibold ${grade.passed ? "text-term-green" : "text-term-red"}`}>
-                  {grade.passed ? "✅ All checks passed — step complete!" : "❌ Not yet — " + grade.earned + "/" + grade.max + " marks"}
+                  {grade.passed ? "All checks passed — step complete." : "Not yet: " + grade.earned + "/" + grade.max + " marks"}
                 </div>
                 <ul className="space-y-1">
                   {grade.results.map((r, i) => (
                     <li
                       key={i}
-                      className={`animate-fadeIn flex items-start gap-2 rounded border px-2 py-1 text-xs ${
+                      className={`flex items-start gap-2 rounded border px-2 py-1 text-xs ${
                         r.passed ? "border-term-green/25 bg-term-green/5" : "border-term-red/25 bg-term-red/5"
                       }`}
-                      style={{ animationDelay: `${i * 60}ms` }}
                     >
                       <span className={r.passed ? "text-term-green" : "text-term-red"}>{r.passed ? "✓" : "✗"}</span>
                       <span className="flex-1 text-term-text/85">{r.message}</span>

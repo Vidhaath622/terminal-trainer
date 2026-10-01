@@ -68,7 +68,7 @@ export const THEORY_TOPICS: TheoryTopic[] = [
   {
     id: "permissions",
     icon: "🔒",
-    iconColor: "text-term-violet",
+    iconColor: "text-term-text",
     title: "Permissions & chmod",
     summary: "Reading rwx strings, user/group/other, numeric and symbolic chmod.",
     points: [

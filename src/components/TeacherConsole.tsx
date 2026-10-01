@@ -49,13 +49,13 @@ export default function TeacherConsole() {
     <div className="space-y-4">
       {/* role switcher */}
       <div className="flex flex-wrap items-center gap-2 rounded border border-term-border bg-term-panel p-3">
-        <span className="text-xs uppercase text-term-text/50">Acting as</span>
+        <span className="font-mono text-xs uppercase text-term-text/50">Acting as</span>
         {ROLE_TABS.map((r) => (
           <button
             key={r}
             onClick={() => setRole(r)}
-            className={`rounded px-2 py-1 text-xs ${
-              role === r ? "bg-term-blue/20 text-term-blue" : "border border-term-border text-term-text/70"
+            className={`rounded px-2 py-1 font-mono text-xs ${
+              role === r ? "bg-term-green/15 text-term-green" : "border border-term-border text-term-text/70"
             }`}
             data-testid={`role-${r}`}
           >
@@ -72,8 +72,8 @@ export default function TeacherConsole() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`rounded px-3 py-1.5 text-xs ${
-              tab === t ? "bg-term-panel font-semibold text-term-blue" : "text-term-text/60 hover:text-term-text"
+            className={`rounded px-3 py-1.5 font-mono text-xs ${
+              tab === t ? "bg-term-panel font-semibold text-term-green" : "text-term-text/60 hover:text-term-text"
             }`}
           >
             {t === "problems" ? "Problem catalog" : t === "quiz" ? "Quiz / assignment" : "Upload (teachers)"}
@@ -106,7 +106,7 @@ export default function TeacherConsole() {
       {tab === "upload" && (
         <div className="max-w-2xl space-y-2" data-testid="upload-panel">
           <p className="text-xs text-term-text/60">
-            Paste a problem JSON (schema: steps → checks with marks). Students never see this tab content restrictions apply per role.
+            Paste a problem JSON (schema: steps, each with checks and marks). Students never see this tab; content restrictions apply per role.
           </p>
           <textarea
             className="h-48 w-full rounded border border-term-border bg-term-bg p-2 font-mono text-xs"

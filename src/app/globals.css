@@ -12,18 +12,13 @@ html {
 
 body {
   background-color: #0a0e14;
-  background-image:
-    radial-gradient(1100px 500px at 85% -10%, rgba(88, 166, 255, 0.09), transparent 60%),
-    radial-gradient(900px 480px at -10% 0%, rgba(63, 185, 80, 0.07), transparent 60%),
-    radial-gradient(1000px 600px at 50% 120%, rgba(163, 113, 247, 0.06), transparent 65%);
-  background-repeat: no-repeat;
-  background-attachment: fixed;
 }
 
 ::selection {
   background: rgba(63, 185, 80, 0.35);
 }
 
+/* Thin, flat scrollbars. */
 * {
   scrollbar-width: thin;
   scrollbar-color: #2a3441 transparent;
@@ -33,7 +28,7 @@ body {
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #2a3441, #1e2733);
+  background: #2a3441;
   border-radius: 4px;
 }
 *::-webkit-scrollbar-thumb:hover {
@@ -44,279 +39,21 @@ body {
 }
 
 @layer utilities {
-  .text-gradient {
-    @apply bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 bg-clip-text text-transparent;
-  }
-  .text-gradient-violet {
-    @apply bg-gradient-to-r from-violet-400 via-fuchsia-300 to-sky-400 bg-clip-text text-transparent;
-  }
+  /* Flat card: border and panel background only. */
   .card {
-    @apply rounded-xl border border-term-border bg-term-panel shadow-card;
-  }
-  /* Frosted panel with a top edge light. */
-  .glass {
-    background: linear-gradient(180deg, rgba(21, 29, 41, 0.85), rgba(16, 22, 31, 0.92));
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-  /* Animated highlight sweep across buttons/cards (hidden at rest). */
-  .shine {
-    position: relative;
-    overflow: hidden;
-  }
-  .shine::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: -80%;
-    width: 60%;
-    background: linear-gradient(
-      115deg,
-      transparent,
-      rgba(255, 255, 255, 0.14),
-      transparent
-    );
-    transform: skewX(-20deg);
-    transition: left 0.7s ease;
-    pointer-events: none;
-  }
-  .shine:hover::after {
-    left: 130%;
-  }
-  /* Subtle blueprint grid, fading at the edges. */
-  .bg-grid {
-    background-image:
-      linear-gradient(rgba(88, 166, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(88, 166, 255, 0.05) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: radial-gradient(ellipse 90% 70% at 50% 20%, black 30%, transparent 75%);
-    -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 20%, black 30%, transparent 75%);
-  }
-  /* CRT scanlines for the terminal glass. */
-  .scanlines::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.025) 0px,
-      rgba(255, 255, 255, 0.025) 1px,
-      transparent 1px,
-      transparent 3px
-    );
-    pointer-events: none;
-    border-radius: inherit;
-  }
-  .animate-pulse-dot {
-    animation: pulseGlow 2.4s ease-in-out infinite;
-  }
-  /* Unified card/button interaction: lift + deep shadow, no color glow baked in. */
-  .hover-lift {
-    transition:
-      transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1),
-      border-color 200ms cubic-bezier(0.22, 1, 0.36, 1),
-      background-color 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  .hover-lift:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
-      0 20px 44px -16px rgba(0, 0, 0, 0.75), 0 0 34px -14px rgba(88, 166, 255, 0.2);
-  }
-  .hover-lift:active {
-    transform: translateY(0) scale(0.98);
-  }
-  /* Overline eyebrow: numbered micro-label above section headings. */
-  .overline {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 11px;
-    line-height: 1;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.25em;
-    color: #8b98a9;
-  }
-  .overline::before {
-    content: "";
-    display: inline-block;
-    width: 14px;
-    height: 2px;
-    background: var(--overline-color, #3fb950);
-    border-radius: 1px;
-  }
-  /* Gradient hairline divider, fading to transparent at both ends. */
-  .hairline {
-    border: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
-  }
-  /* Scroll reveal: settled state is fully visible; JS adds .reveal-pending.
-     prefers-reduced-motion keeps the settled state permanently. */
-  .reveal-pending {
-    opacity: 0;
-    transform: translateY(18px);
-    filter: blur(6px);
-  }
-  .reveal-shown {
-    opacity: 1;
-    transform: none;
-    filter: none;
-    transition:
-      opacity 600ms cubic-bezier(0.22, 1, 0.36, 1),
-      transform 600ms cubic-bezier(0.22, 1, 0.36, 1),
-      filter 600ms cubic-bezier(0.22, 1, 0.36, 1);
-    transition-delay: calc(var(--i, 0) * 60ms);
-  }
-  /* Group variant: one observer on the container; children stagger via --i. */
-  .reveal-group .reveal-item {
-    opacity: 0;
-    transform: translateY(18px);
-    filter: blur(6px);
-  }
-  .reveal-group.reveal-shown .reveal-item {
-    opacity: 1;
-    transform: none;
-    filter: none;
-    transition:
-      opacity 600ms cubic-bezier(0.22, 1, 0.36, 1),
-      transform 600ms cubic-bezier(0.22, 1, 0.36, 1),
-      filter 600ms cubic-bezier(0.22, 1, 0.36, 1);
-    transition-delay: calc(var(--i, 0) * 60ms);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .reveal-pending {
-      opacity: 1;
-      transform: none;
-      filter: none;
-    }
-    .reveal-shown {
-      transition: none;
-    }
-    .reveal-group .reveal-item {
-      opacity: 1;
-      transform: none;
-      filter: none;
-      transition: none;
-    }
-    .hover-lift,
-    .hover-lift:hover,
-    .hover-lift:active {
-      transition: none;
-      transform: none;
-    }
-    .aurora,
-    .border-beam::before {
-      animation: none;
-    }
-  }
-  /* Count-up numbers: hidden until JS renders the final value. */
-  .countup-pending {
-    visibility: hidden;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .countup-pending {
-      visibility: visible;
-    }
+    @apply rounded-md border border-term-border bg-term-panel;
   }
 }
 
-/* ---- Depth & atmosphere ---------------------------------------------- */
-
-/* Conic border beam: 1px rotating ring around rounded elements.
-   @property --angle requires a registered custom property; a non-animated
-   fallback renders a static green→blue→violet gradient ring. */
-@property --angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-.border-beam {
-  position: relative;
-}
-.border-beam::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  z-index: 1;
-  border-radius: inherit;
-  padding: 1px;
-  background: conic-gradient(
-    from var(--angle),
-    rgba(63, 185, 80, 0.9),
-    rgba(88, 166, 255, 0.7) 30%,
-    rgba(163, 113, 247, 0.6) 55%,
-    rgba(63, 185, 80, 0.15) 75%,
-    rgba(63, 185, 80, 0.9)
-  );
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-}
-@property --beam-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-@keyframes beam-spin {
-  to {
-    --beam-angle: 360deg;
-  }
-}
-.border-beam::before {
-  --angle: var(--beam-angle, 0deg);
-  animation: beam-spin 6s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .border-beam::before {
-    animation: none;
-  }
+/* Visible keyboard focus. */
+:focus-visible {
+  outline: 2px solid #3fb950;
+  outline-offset: 2px;
 }
 
-/* Aurora: one slow conic drift behind the hero. */
-.aurora {
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  background: conic-gradient(
-    from 180deg at 60% 40%,
-    rgba(63, 185, 80, 0.18),
-    rgba(88, 166, 255, 0.14) 28%,
-    rgba(163, 113, 247, 0.14) 55%,
-    rgba(63, 185, 80, 0.18)
-  );
-  filter: blur(80px);
-  opacity: 0.2;
-  animation: aurora-drift 18s ease-in-out infinite alternate;
-  pointer-events: none;
-}
-@keyframes aurora-drift {
-  from {
-    transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1);
-  }
-  to {
-    transform: translate3d(3%, 2%, 0) rotate(8deg) scale(1.06);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .aurora {
-    animation: none;
-  }
-}
-
-/* Film grain to kill gradient banding. */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  pointer-events: none;
-  opacity: 0.03;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 160px 160px;
+/* Keep body text readable: serif body copy at a comfortable measure. */
+.prose-body {
+  font-family: var(--font-sans), Georgia, serif;
+  line-height: 1.7;
+  max-width: 70ch;
 }

@@ -1,77 +1,87 @@
+import SiteHeader from "@/components/SiteHeader";
 import CodeBlock from "@/components/CodeBlock";
+
+export const metadata = {
+  title: "Terminal Trainer: embed guide",
+  description:
+    "Drop Terminal Trainer into any college website with one iframe and a small postMessage API.",
+};
 
 export default function EmbedDocsPage() {
   return (
-    <main className="mx-auto max-w-3xl space-y-8 px-6 pb-16 pt-10 text-sm leading-relaxed">
-      <header className="animate-slideUp">
-        <p className="text-xs font-semibold uppercase tracking-widest text-term-blue">Integration guide</p>
-        <h1 className="mt-1 text-2xl font-bold">Embedding Terminal Trainer</h1>
-        <p className="mt-3 max-w-2xl text-term-muted">
-          Terminal Trainer is designed to drop into any college website — WordPress, Moodle,
-          Drupal, or a custom LMS — via an iframe plus a small postMessage API. Your site owns
-          the students; we own the practice environment and grading.
-        </p>
-      </header>
+    <>
+      <SiteHeader />
+      <main className="mx-auto max-w-3xl space-y-8 px-6 pb-16 pt-10 text-sm leading-relaxed">
+        <header>
+          <h1 className="font-mono text-2xl font-bold">Embedding Terminal Trainer</h1>
+          <p className="prose-body mt-3 text-term-muted">
+            Terminal Trainer is designed to drop into any college website —
+            WordPress, Moodle, Drupal, or a custom LMS — via an iframe plus a
+            small postMessage API. Your site owns the students; this owns the
+            practice environment and grading.
+          </p>
+        </header>
 
-      <section>
-        <h2 className="text-lg font-semibold">1. Embed the widget</h2>
-        <p className="mt-1 text-term-text/70">
-          Point the iframe at <code>/embed</code>. Query params: <code>?problem=&lt;id&gt;</code> to
-          preselect a problem, <code>?student=&lt;id&gt;</code> to namespace saved progress,
-          <code> &amp;compact=1</code> for a tighter layout.
-        </p>
-        <CodeBlock>{IFRAME_SNIPPET}</CodeBlock>
-      </section>
+        <section>
+          <h2 className="text-lg font-semibold">1. Embed the widget</h2>
+          <p className="prose-body mt-1 text-term-text/70">
+            Point the iframe at <code>/embed</code>. Query params: <code>?problem=&lt;id&gt;</code> to
+            preselect a problem, <code>?student=&lt;id&gt;</code> to namespace saved progress,
+            <code> &amp;compact=1</code> for a tighter layout.
+          </p>
+          <CodeBlock>{IFRAME_SNIPPET}</CodeBlock>
+        </section>
 
-      <section>
-        <h2 className="text-lg font-semibold">2. Receive marks (postMessage)</h2>
-        <p className="mt-1 text-term-text/70">
-          The widget posts these messages to its parent window:
-        </p>
-        <ul className="ml-5 list-disc space-y-1 text-term-text/70">
-          <li><code>tt:ready</code> — the widget is up; includes the problem list.</li>
-          <li><code>tt:step:completed</code> — a step&apos;s checks all passed (includes marks so far).</li>
-          <li><code>tt:problem:completed</code> — the whole problem is done; store <code>earned/max</code> against your student.</li>
-          <li><code>tt:progress</code> — periodic progress snapshots.</li>
-        </ul>
-        <CodeBlock>{HOST_SNIPPET}</CodeBlock>
-      </section>
+        <section>
+          <h2 className="text-lg font-semibold">2. Receive marks (postMessage)</h2>
+          <p className="prose-body mt-1 text-term-text/70">
+            The widget posts these messages to its parent window:
+          </p>
+          <ul className="ml-5 list-disc space-y-1 text-term-text/70">
+            <li><code>tt:ready</code> — the widget is up; includes the problem list.</li>
+            <li><code>tt:step:completed</code> — a step&apos;s checks all passed (includes marks so far).</li>
+            <li><code>tt:problem:completed</code> — the whole problem is done; store <code>earned/max</code> against your student.</li>
+            <li><code>tt:progress</code> — periodic progress snapshots.</li>
+          </ul>
+          <CodeBlock>{HOST_SNIPPET}</CodeBlock>
+        </section>
 
-      <section>
-        <h2 className="text-lg font-semibold">3. Control the widget</h2>
-        <p className="mt-1 text-term-text/70">
-          Send messages <em>into</em> the iframe to configure it at runtime:
-        </p>
-        <CodeBlock>{CONTROL_SNIPPET}</CodeBlock>
-        <p className="mt-2 text-term-text/70">
-          <code>tt:init</code> accepts <code>studentId</code>, <code>problemId</code>, or a full
-          inline <code>problem</code> JSON (teacher-authored, same schema as the upload console —
-          invalid problems are rejected with a readable error).
-        </p>
-      </section>
+        <section>
+          <h2 className="text-lg font-semibold">3. Control the widget</h2>
+          <p className="prose-body mt-1 text-term-text/70">
+            Send messages <em>into</em> the iframe to configure it at runtime:
+          </p>
+          <CodeBlock>{CONTROL_SNIPPET}</CodeBlock>
+          <p className="prose-body mt-2 text-term-text/70">
+            <code>tt:init</code> accepts <code>studentId</code>, <code>problemId</code>, or a full
+            inline <code>problem</code> JSON (teacher-authored, same schema as the upload console —
+            invalid problems are rejected with a readable error).
+          </p>
+        </section>
 
-      <section>
-        <h2 className="text-lg font-semibold">4. Author your own problems</h2>
-        <p className="mt-1 text-term-text/70">
-          Problems are JSON: a brief, an initial filesystem, and ordered steps — each step has
-          marks and checks (file exists, file contains, mode, output equals, command used…).
-          The schema is enforced end-to-end, and every problem ships with machine-checked
-          solutions. Full schema reference: <code>src/engine/schema.ts</code>.
-        </p>
-      </section>
+        <section>
+          <h2 className="text-lg font-semibold">4. Author your own problems</h2>
+          <p className="prose-body mt-1 text-term-text/70">
+            Problems are JSON: a brief, an initial filesystem, and ordered steps — each step has
+            marks and checks (file exists, file contains, mode, output equals, command used…).
+            The schema is enforced end-to-end, and every problem ships with machine-checked
+            solutions. Full schema reference: <code>src/engine/schema.ts</code>.
+          </p>
+        </section>
 
-      <section>
-        <h2 className="text-lg font-semibold">Roles & permissions</h2>
-        <p className="mt-1 text-term-text/70">
-          The platform distinguishes teachers and students at the data layer: teachers hold
-          <code> problem:create</code>, <code>testcase:upload</code>, <code>quiz:create</code>,
-          <code> assignment:grade</code> capabilities; students hold only
-          <code> content:view</code>, <code>content:answer</code>, and
-          <code> progress:viewOwn</code>. Every mutation path enforces these with typed guards
-          (see <code>src/roles/</code>), and the teacher console demonstrates the walls live.
-        </p>
-      </section>
-    </main>
+        <section>
+          <h2 className="text-lg font-semibold">Roles and permissions</h2>
+          <p className="prose-body mt-1 text-term-text/70">
+            The platform distinguishes teachers and students at the data layer: teachers hold
+            <code> problem:create</code>, <code>testcase:upload</code>, <code>quiz:create</code>,
+            <code> assignment:grade</code> capabilities; students hold only
+            <code> content:view</code>, <code>content:answer</code>, and
+            <code> progress:viewOwn</code>. Every mutation path checks these with typed guards
+            (see <code>src/roles/</code>), and the teacher console demonstrates the walls live.
+          </p>
+        </section>
+      </main>
+    </>
   );
 }
 

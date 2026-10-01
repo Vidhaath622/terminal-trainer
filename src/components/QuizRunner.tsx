@@ -24,7 +24,7 @@ export default function QuizRunner({ quiz, onSubmit }: { quiz: Quiz; onSubmit?: 
       <div>
         <h2 className="text-lg font-semibold">{clean.title}</h2>
         {clean.instructions && <p className="text-xs text-term-text/60">{clean.instructions}</p>}
-        <span className="text-[10px] uppercase text-term-text/50">{clean.kind}</span>
+        <span className="font-mono text-[10px] uppercase text-term-text/50">{clean.kind}</span>
       </div>
 
       {clean.questions.map((q, idx) => {

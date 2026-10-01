@@ -74,7 +74,7 @@ export default function PlayClient({ id }: { id: string }) {
           {LAUNCH_PROBLEMS.map((p) => (
             <li key={p.id} className="flex items-center gap-2">
               <span className="text-term-muted">·</span> {p.title}
-              <code className="rounded bg-term-panel px-1.5 py-0.5 text-xs text-term-muted">
+              <code className="rounded bg-term-panel px-1.5 py-0.5 font-mono text-xs text-term-muted">
                 {p.id}
               </code>
             </li>
@@ -85,11 +85,10 @@ export default function PlayClient({ id }: { id: string }) {
   }
 
   return (
-    <main className="relative h-screen p-2 sm:p-3">
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-grid" />
+    <main className="h-screen p-2 sm:p-3">
       {loading ? (
         <div className="flex h-full items-center justify-center">
-          <div className="animate-pulse text-sm text-term-muted">Restoring progress…</div>
+          <div className="animate-pulse text-sm text-term-muted">Restoring progress</div>
         </div>
       ) : (
         <ProblemPlayer

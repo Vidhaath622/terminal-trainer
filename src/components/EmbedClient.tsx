@@ -124,7 +124,7 @@ export default function EmbedClient() {
           {LAUNCH_PROBLEMS.map((p) => (
             <li key={p.id}>
               <button
-                className="text-term-blue hover:underline"
+                className="text-term-blue underline-offset-2 hover:underline"
                 onClick={() => setProblem(getLaunchProblem(p.id) ?? null)}
               >
                 {p.title} <span className="text-term-text/50">({p.difficulty}, {maxMarks(p)} marks)</span>
