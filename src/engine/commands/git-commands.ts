@@ -409,7 +409,13 @@ function gitStatus(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
   for (const rel of meta.tracked) {
     const abs = absPath(root, rel);
     if (!ctx.vfs.isFile(abs)) deleted.push(rel);
-    else if (rel in head && ctx.vfs.readFile(abs) !== head[rel]) modified.push(rel);
+    else {
+      // Like real git: "not staged" compares the working tree against the
+      // effective index (staged content when present, else HEAD), so a
+      // fully staged file stops appearing as unstaged.
+      const indexContent = rel in meta.staged ? meta.staged[rel] : head[rel];
+      if (indexContent !== undefined && ctx.vfs.readFile(abs) !== indexContent) modified.push(rel);
+    }
   }
   const known = new Set([...meta.tracked, ...stagedKeys]);
   const untracked = repoFiles(ctx, root).map((p) => relPath(root, p)).filter((rel) => !known.has(rel)).sort();

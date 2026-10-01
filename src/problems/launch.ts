@@ -1632,7 +1632,7 @@ const rawProblems = [
         { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" },
         { path: "/home/student/project/README.md", content: "# Demo\n" },
         { path: "/home/student/project/todo.txt", content: "buy milk\n" },
-        { path: "/home/student/project/.git", content: "__GIT_STATUS__" },
+        { path: "/home/student/project/.git", content: GIT_STATUS_FIXTURE },
       ],
       home: "/home/student/project",
       user: "student",
@@ -1690,7 +1690,7 @@ const rawProblems = [
     tags: ["git", "log", "history"],
     brief:
       "A repository with three commits is waiting. Read its history three ways from the cheat sheet's History section: full git log, the one-line digest, and -n to limit how far back you go.",
-    fs: { dirs: ["/home/student/project"], files: [{ path: "/home/student/project/.git", content: "__GIT_DEMO__" }, { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" }, { path: "/home/student/project/README.md", content: "# Demo\n\nLearning git.\n" }], home: "/home/student/project", user: "student" },
+    fs: GIT_DEMO_FS,
     steps: [
       {
         id: "s1",
@@ -1749,7 +1749,7 @@ const rawProblems = [
     tags: ["git", "log", "history", "pipes", "wc"],
     brief:
       "History with numbers: --stat appends a per-file tally to every commit. Combine it with the pipes you already know — wc -l to count commits, grep to find the one about the readme.",
-    fs: { dirs: ["/home/student/project"], files: [{ path: "/home/student/project/.git", content: "__GIT_DEMO__" }, { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" }, { path: "/home/student/project/README.md", content: "# Demo\n\nLearning git.\n" }], home: "/home/student/project", user: "student" },
+    fs: GIT_DEMO_FS,
     steps: [
       {
         id: "s1",
@@ -1762,7 +1762,7 @@ const rawProblems = [
         marks: 4,
         checks: [
           { type: "outputContains" as const, value: "README.md | 2 ++", marks: 2 },
-          { type: "outputContains" as const, value: "1 file changed, 1 insertion(+), 0 deletions(-)", marks: 2 },
+          { type: "outputContains" as const, value: "1 file changed, 2 insertions(+), 0 deletions(-)", marks: 2 },
         ],
       },
       {
@@ -1809,7 +1809,7 @@ id: "s4",
     tags: ["git", "show", "log", "history", "diff"],
     brief:
       "Commits carry their own diffs. git show prints one commit with its patch; git log -p prints every commit with theirs. Learn to read the '-' and '+' lines — that skill is the whole History section's punchline.",
-    fs: { dirs: ["/home/student/project"], files: [{ path: "/home/student/project/.git", content: "__GIT_DEMO__" }, { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" }, { path: "/home/student/project/README.md", content: "# Demo\n\nLearning git.\n" }], home: "/home/student/project", user: "student" },
+    fs: GIT_DEMO_FS,
     steps: [
       {
         id: "s1",
@@ -1879,7 +1879,7 @@ id: "s4",
       files: [
         { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" },
         { path: "/home/student/project/README.md", content: "# Demo\n\nDraft notes.\n" },
-        { path: "/home/student/project/.git", content: "__GIT_STAGED__" },
+        { path: "/home/student/project/.git", content: GIT_STAGED_FIXTURE },
       ],
       home: "/home/student/project",
       user: "student",
@@ -1952,7 +1952,7 @@ id: "s4",
     tags: ["git", "diff", "history", "pipes", "wc"],
     brief:
       "git diff takes commit ids: two of them compares then vs now, and order matters — swap them and every '+' becomes a '-'. Then count the changed lines by piping into wc -l.",
-    fs: { dirs: ["/home/student/project"], files: [{ path: "/home/student/project/.git", content: "__GIT_DEMO__" }, { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" }, { path: "/home/student/project/README.md", content: "# Demo\n\nLearning git.\n" }], home: "/home/student/project", user: "student" },
+    fs: GIT_DEMO_FS,
     steps: [
       {
         id: "s1",
@@ -1988,7 +1988,7 @@ id: "s4",
         ],
         marks: 4,
         checks: [
-          { type: "outputEquals" as const, value: "14", marks: 3 },
+          { type: "outputEquals" as const, value: "13", marks: 3 },
           { type: "commandUsed" as const, commands: ["wc"], marks: 1 },
         ],
       },
@@ -2017,7 +2017,7 @@ id: "s4",
       files: [
         { path: "/home/student/project/app.py", content: "print(\"hello\")\nprint(\"goodbye\")\n" },
         { path: "/home/student/project/notes.txt", content: "meeting at noon\n" },
-        { path: "/home/student/project/.git", content: "__GIT_AM__" },
+        { path: "/home/student/project/.git", content: GIT_AM_FIXTURE },
       ],
       home: "/home/student/project",
       user: "student",
@@ -2106,7 +2106,7 @@ id: "s4",
         { path: "/home/student/project/app.py", content: "print(\"hello\")\n" },
         { path: "/home/student/project/temp.log", content: "debug line\n" },
         { path: "/home/student/project/draft.txt", content: "v1\n" },
-        { path: "/home/student/project/.git", content: "__GIT_RM__" },
+        { path: "/home/student/project/.git", content: GIT_RM_FIXTURE },
       ],
       home: "/home/student/project",
       user: "student",

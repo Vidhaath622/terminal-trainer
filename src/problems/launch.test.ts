@@ -4,10 +4,10 @@ import { Session } from "@/engine/session";
 import { maxMarks } from "@/engine/grader";
 
 describe("launch problem set", () => {
-  it("has exactly 20 valid problems", () => {
-    expect(LAUNCH_PROBLEMS).toHaveLength(20);
+  it("has exactly 30 valid problems", () => {
+    expect(LAUNCH_PROBLEMS).toHaveLength(30);
     const ids = LAUNCH_PROBLEMS.map((p) => p.id);
-    expect(new Set(ids).size).toBe(20);
+    expect(new Set(ids).size).toBe(30);
   });
 
   it("lookup finds a problem by id", () => {
@@ -209,6 +209,75 @@ describe("launch problems are solvable to full marks", () => {
       "git status",
       "git commit -m \"First commit\"",
       "git log",
+      "git status",
+    ],
+    "git-setup-drill": [
+      "git config --global user.name \"Grace Hopper\"",
+      "git config --global user.email grace@example.com",
+      "git config --global init.defaultBranch main",
+      "git config --list",
+    ],
+    "git-init-branch": [
+      "cd project",
+      "git init -b main",
+      "git status",
+      "git init",
+    ],
+    "git-status-short": [
+      "git status",
+      "git status -s",
+      "git add app.py",
+      "git status -s",
+    ],
+    "git-log-formats": [
+      "git log",
+      "git log --oneline",
+      "git log --oneline -n 2",
+      "git log -n 1",
+    ],
+    "git-log-stat": [
+      "git log --stat",
+      "git log --oneline | wc -l",
+      "git log --oneline | grep readme",
+      "git log --stat -n 2",
+    ],
+    "git-show-patch": [
+      "git show HEAD",
+      "git show HEAD~1",
+      "git log -p",
+      "git show a1b2c3d",
+    ],
+    "git-diff-staged": [
+      "git status",
+      "git diff",
+      "git diff --staged",
+      "git add app.py",
+      "git status",
+    ],
+    "git-diff-commits": [
+      "git diff a1b2c3d c7d8e9f",
+      "git diff c7d8e9f a1b2c3d",
+      "git diff a1b2c3d c7d8e9f | wc -l",
+      "git diff a1b2c3d",
+    ],
+    "git-commit-am": [
+      "git status",
+      "git commit -am \"Add goodbye line\"",
+      "git status",
+      "git add notes.txt",
+      "git commit -m \"Add meeting notes\"",
+      "git log --oneline",
+    ],
+    "git-rm-mv": [
+      "git mv draft.txt notes.txt",
+      "git status",
+      "git commit -m \"Rename draft to notes\"",
+      "git rm temp.log",
+      "git status",
+      "git commit -m \"Remove debug log\"",
+      "git rm --cached notes.txt",
+      "git status",
+      "git commit -m \"Stop tracking notes\"",
       "git status",
     ],
     "chmod-permissions": [

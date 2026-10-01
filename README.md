@@ -25,7 +25,7 @@ npm run build      # production build
 | Problems & checks | `src/engine/schema.ts` | Zod schema, 15 check types, marks invariant |
 | Grader | `src/engine/grader.ts` | Per-check pass/fail + human messages |
 | Session | `src/engine/session.ts` | Auto-grading, events, reset, persistence |
-| Launch problems | `src/problems/launch.ts` | 20 problems, each with a tested solution |
+| Launch problems | `src/problems/launch.ts` | 30 problems incl. a 10-problem Git track, each with a tested solution |
 | Roles | `src/roles/` | Teacher/student/admin capabilities, quizzes, submissions |
 | Embed API | `src/embed/protocol.ts` | postMessage types + host helper |
 | UI | `src/components/`, `src/app/` | xterm terminal, player, teacher console, docs |
