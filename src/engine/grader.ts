@@ -11,6 +11,8 @@ export interface GradeInput {
   stepCommands: string[];
   /** stdout of the most recent command (for output* checks) */
   lastOutput: string;
+  /** stderr of the most recent command, null when it succeeded (for errorContains) */
+  lastError: string | null;
   problem: Problem;
   step: Step;
 }
@@ -104,6 +106,13 @@ export function evaluateCheck(check: Check, input: GradeInput): CheckResult {
       const re = new RegExp(check.pattern, check.flags);
       const text = input.lastOutput.replace(/\n$/, "");
       return re.test(text) ? pass(`output matches /${check.pattern}/`) : fail(`output does not match /${check.pattern}/`);
+    }
+    case "errorContains": {
+      const err = input.lastError;
+      if (err === null) return fail("no error printed - the last command succeeded");
+      return err.includes(check.value)
+        ? pass(`error contains ${JSON.stringify(check.value)}`)
+        : fail(`error does not contain ${JSON.stringify(check.value)}: got ${JSON.stringify(err)}`);
     }
     case "commandUsed": {
       const used = input.stepCommands.some((cmd) => {

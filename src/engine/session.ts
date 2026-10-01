@@ -110,6 +110,7 @@ export class Session {
   run(line: string, at = Date.now()): RunResult {
     const result = this.shell.run(line);
     this.lastOutput = result.stdout;
+    this.lastError = result.error;
     this.stepCommands.push(line.trim());
     this.durationMs += at - (this.lastCommandAt ?? this.startedAt);
     this.lastCommandAt = at;
@@ -136,12 +137,14 @@ export class Session {
       vfs: this.vfs,
       stepCommands: this.stepCommands,
       lastOutput: this.lastOutput,
+      lastError: this.lastError,
       problem: this.problem,
       step: this.currentStep,
     });
   }
 
   private lastOutput = "";
+  private lastError: string | null = null;
 
   /** Force-complete the current step when its checks all pass. */
   private autoGrade(at: number): void {
@@ -150,6 +153,7 @@ export class Session {
       vfs: this.vfs,
       stepCommands: this.stepCommands,
       lastOutput: this.lastOutput,
+      lastError: this.lastError,
       problem: this.problem,
       step: this.currentStep,
     });
@@ -185,6 +189,7 @@ export class Session {
     this.completedSteps = [];
     this.stepCommands = [];
     this.lastOutput = "";
+    this.lastError = null;
     this.problemCompletedFired = false;
     this.clearPersisted();
   }

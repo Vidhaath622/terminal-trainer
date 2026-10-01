@@ -195,7 +195,16 @@ export const sort: CommandImpl = (ctx, args) => {
 };
 
 export const uniq: CommandImpl = (ctx, args) => {
-  const rest = args.filter((a) => !a.startsWith("-"));
+  let count = false;
+  const rest: string[] = [];
+  for (const a of args) {
+    if (a === "-c") {
+      count = true;
+      continue;
+    }
+    if (a.startsWith("-") && a.length > 1) return fail(`uniq: invalid option '${a}'`);
+    rest.push(a);
+  }
   let text: string;
   if (rest.length === 0) text = ctx.stdin;
   else {
@@ -206,9 +215,20 @@ export const uniq: CommandImpl = (ctx, args) => {
   const parts = text.split("\n");
   if (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
   const out: string[] = [];
+  let prev: string | null = null;
+  let n = 1;
+  const flush = () => {
+    if (prev !== null) out.push(count ? `${n} ${prev}` : prev);
+  };
   for (const p of parts) {
-    if (out.length === 0 || out[out.length - 1] !== p) out.push(p);
+    if (p === prev) n++;
+    else {
+      flush();
+      prev = p;
+      n = 1;
+    }
   }
+  flush();
   return ok(out.length > 0 ? out.join("\n") + "\n" : "");
 };
 
@@ -306,7 +326,7 @@ const MAN_PAGES: Record<string, string> = {
   tail: "tail - output the last part of files\n\nSYNOPSIS\n  tail [-n N] [FILE]\n\nDESCRIPTION\n  Print the last N lines (default 10) of FILE or stdin.\n",
   wc: "wc - print newline, word and byte counts\n\nSYNOPSIS\n  wc [-l] [-w] [-c] [FILE]\n\nDESCRIPTION\n  Print counts for FILE or stdin: lines (-l), words (-w), characters (-c).\n",
   sort: "sort - sort lines of text\n\nSYNOPSIS\n  sort [FILE]\n\nDESCRIPTION\n  Sort the lines of FILE or stdin alphabetically.\n",
-  uniq: "uniq - report or omit repeated lines\n\nSYNOPSIS\n  uniq [FILE]\n\nDESCRIPTION\n  Filter adjacent matching lines from FILE or stdin.\n",
+  uniq: "uniq - report or omit repeated lines\n\nSYNOPSIS\n  uniq [-c] [FILE]\n\nDESCRIPTION\n  Filter adjacent matching lines from FILE or stdin.\n  -c  prefix each output line with its occurrence count\n",
   find: "find - search for files in a directory hierarchy\n\nSYNOPSIS\n  find [PATH] [-name GLOB] [-type f|d]\n\nDESCRIPTION\n  Walk PATH and print every file and directory. Filter by name glob or type.\n",
   tree: "tree - list contents of directories in a tree-like format\n\nSYNOPSIS\n  tree [DIR]\n\nDESCRIPTION\n  List directory contents recursively with indentation.\n",
   chmod: "chmod - change file permissions\n\nSYNOPSIS\n  chmod MODE FILE\n\nDESCRIPTION\n  Change file permissions using octal MODE, e.g. chmod 644 notes.txt.\n  7 = rwx, 6 = rw-, 5 = r-x, 4 = r--, 0 = ---.\n",

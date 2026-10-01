@@ -8,10 +8,11 @@
  * Deep-link support: /?theory=<id>#theory-<id> (used by the related-theory
  * sidebar on /play pages) opens that card on arrival and on hash changes.
  */
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { THEORY_TOPICS as TOPICS } from "@/lib/theory";
+import { useReveal } from "@/lib/useReveal";
 
 const TOPIC_IDS = new Set(TOPICS.map((t) => t.id));
 
@@ -30,6 +31,7 @@ function TheoryNotesInner() {
   const searchParams = useSearchParams();
   const paramTopic = searchParams.get("theory");
   const [openId, setOpenId] = useState<string | null>(() => hashTopic());
+  const { ref, shown } = useReveal<HTMLDivElement>();
 
   // Open the card requested via ?theory=<id> (survives soft navigations).
   useEffect(() => {
@@ -49,16 +51,17 @@ function TheoryNotesInner() {
   }, []);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      {TOPICS.map((t) => {
+    <div ref={ref} className={`grid gap-4 lg:grid-cols-2 reveal-group ${shown ? "reveal-shown" : "reveal-pending"}`}>
+      {TOPICS.map((t, idx) => {
         const open = openId === t.id;
         return (
           <article
             key={t.id}
             id={`theory-${t.id}`}
-            className={`card scroll-mt-24 transition duration-200 ${
+            className={`card reveal-item hover-lift scroll-mt-24 ${
               open ? "border-term-border bg-term-raise/60" : "hover:bg-term-raise/40"
             }`}
+            style={{ "--i": Math.min(idx, 11) } as CSSProperties}
           >
             <button
               onClick={() => setOpenId(open ? null : t.id)}

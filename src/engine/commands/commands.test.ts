@@ -277,6 +277,11 @@ describe("sort / uniq", () => {
     const sh = makeShell({ files: [{ path: "/f", content: "a\na\nb\na\n" }] });
     expect(sh.run("uniq /f").stdout).toBe("a\nb\na\n");
   });
+
+  it("uniq -c prefixes adjacent groups with their count", () => {
+    const sh = makeShell({ files: [{ path: "/f", content: "b\na\na\n" }] });
+    expect(sh.run("cat /f | sort | uniq -c").stdout).toBe("2 a\n1 b\n");
+  });
 });
 
 describe("find", () => {
@@ -363,6 +368,14 @@ describe("session commands", () => {
 
   it("help lists commands", () => {
     expect(makeShell().run("help").stdout).toContain("grep");
+  });
+
+  it("say echoes the sentence back", () => {
+    expect(makeShell().run("say Terminal is fun").stdout).toContain("Terminal is fun");
+  });
+
+  it("say with no args fails", () => {
+    expect(makeShell().run("say").error).not.toBeNull();
   });
 
   it("date prints something date-like", () => {

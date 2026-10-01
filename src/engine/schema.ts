@@ -89,6 +89,13 @@ export const outputMatchesCheck = z.object({
   marks: z.number().nonnegative(),
 });
 
+export const errorContainsCheck = z.object({
+  type: z.literal("errorContains"),
+  /** exact substring required in the last command's error output */
+  value: z.string(),
+  marks: z.number().nonnegative(),
+});
+
 export const commandUsedCheck = z.object({
   type: z.literal("commandUsed"),
   /** any of these commands must appear in the current step's commands */
@@ -121,6 +128,7 @@ export const checkSchema = z.discriminatedUnion("type", [
   outputEqualsCheck,
   outputContainsCheck,
   outputMatchesCheck,
+  errorContainsCheck,
   commandUsedCheck,
   commandUsedWithFlagCheck,
   cwdEqualsCheck,

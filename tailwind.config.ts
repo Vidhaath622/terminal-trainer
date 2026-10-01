@@ -7,6 +7,10 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        display: ["var(--font-display)", "var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
+      transitionTimingFunction: {
+        studio: "cubic-bezier(0.22, 1, 0.36, 1)",
       },
       colors: {
         term: {

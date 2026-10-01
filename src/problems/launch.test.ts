@@ -4,10 +4,10 @@ import { Session } from "@/engine/session";
 import { maxMarks } from "@/engine/grader";
 
 describe("launch problem set", () => {
-  it("has exactly 9 valid problems", () => {
-    expect(LAUNCH_PROBLEMS).toHaveLength(9);
+  it("has exactly 19 valid problems", () => {
+    expect(LAUNCH_PROBLEMS).toHaveLength(19);
     const ids = LAUNCH_PROBLEMS.map((p) => p.id);
-    expect(new Set(ids).size).toBe(9);
+    expect(new Set(ids).size).toBe(19);
   });
 
   it("lookup finds a problem by id", () => {
@@ -40,6 +40,102 @@ describe("launch problems are solvable to full marks", () => {
       "mkdir -p deep/a/b/c",
       "tree",
     ],
+    "terminal-practice": [
+      "mkdir Desktop/terminal-practice",
+      "cd Desktop/terminal-practice",
+      "pwd",
+      "mkdir folder_1",
+      "mkdir folder_2",
+      "mkdir folder_3",
+      "ls",
+      "cd folder_1",
+      "ls",
+      "touch hello.txt",
+      "echo \"Hello Terminal\" > hello.txt",
+      "cat hello.txt",
+    ],
+    "morning-routine": [
+      "whoami",
+      "date",
+      "mkdir diary",
+      "touch diary/today.txt",
+      "echo \"Good morning, terminal!\" > diary/today.txt",
+      "cat diary/today.txt",
+    ],
+    "ask-for-help": ["help", "man ls", "man mkdir", "history", "clear"],
+    "treasure-hunt": [
+      "cat note.txt",
+      "cd downloads",
+      "cat clue2.txt",
+      "cd ../music",
+      "cat clue3.txt",
+      "cd ../pictures",
+      "cat clue4.txt",
+      "cd ~",
+      "tree",
+      "find . -name '*.secret'",
+      "cat music/treasure.secret",
+    ],
+    "recipe-cards": [
+      "mkdir recipes",
+      "touch recipes/pasta.txt recipes/salad.txt recipes/dal.txt",
+      "echo \"Boil the water.\" > recipes/pasta.txt",
+      "echo \"Add the pasta.\" >> recipes/pasta.txt",
+      "echo \"Stir often.\" >> recipes/pasta.txt",
+      "echo \"Taste it.\" >> recipes/pasta.txt",
+      "echo \"Plate it up.\" >> recipes/pasta.txt",
+      "echo \"Toss the greens.\" > recipes/salad.txt",
+      "echo \"Drizzle olive oil.\" >> recipes/salad.txt",
+      "echo \"Serve cold.\" >> recipes/salad.txt",
+      "echo \"Rinse the dal.\" > recipes/dal.txt",
+      "echo \"Boil water with turmeric.\" >> recipes/dal.txt",
+      "echo \"Simmer until soft.\" >> recipes/dal.txt",
+      "echo \"Add salt.\" >> recipes/dal.txt",
+      "echo \"Garnish with coriander.\" >> recipes/dal.txt",
+      "echo \"Serve hot.\" >> recipes/dal.txt",
+      "head -n 2 recipes/pasta.txt",
+      "tail -n 1 recipes/dal.txt",
+      "wc -l recipes/dal.txt",
+      "cat recipes/salad.txt",
+    ],
+    "overwrite-trap": [
+      "echo eggs > list.txt",
+      "echo flour >> list.txt",
+      "echo sugar >> list.txt",
+      "cat list.txt",
+      "wc -l list.txt",
+      "echo \"eggs flour sugar\" > list.txt",
+      "wc -l list.txt",
+    ],
+    "alphabets-workshop": [
+      "mkdir alphabets",
+      "touch a.txt",
+      "ls",
+      "echo apple > a.txt",
+      "cat a.txt",
+      "cp a.txt b.txt",
+      "cat b.txt",
+      "echo banana > b.txt",
+      "cat b.txt",
+      "cp a.txt b.txt",
+      "cat b.txt",
+      "mv alphabets letters",
+      "mv a.txt letters/a.txt",
+      "ls letters",
+      "mv b.txt modifiedName.txt",
+      "rm modifiedName.txt",
+      "ls",
+      "say Terminal is fun",
+    ],
+    "rename-refactor": [
+      "cd mess",
+      "ls",
+      "mkdir docs",
+      "mv \"My Notes.txt\" docs/my-notes.txt",
+      "mv draft2FINAL.txt docs/draft-2-final.txt",
+      "mv todo.old docs/todo.txt",
+      "tree",
+    ],
     "cp-mv-rename": [
       "cp report.txt backup/",
       "whoami", // original still exists; no-op command
@@ -53,11 +149,27 @@ describe("launch problems are solvable to full marks", () => {
       "rm -r keep",
       "ls", // filler; precious.txt gone with the dir
     ],
+    "trash-day": [
+      "cd tidy-me",
+      "tree",
+      "rm old-photo.jpg",
+      "rm old-project",
+      "rm -r old-project",
+      "tree",
+    ],
     "grep-search": [
       "grep ERROR /var/log/app.log",
       "grep -c ERROR /var/log/app.log",
       "grep -v INFO /var/log/app.log",
       "cat /var/log/app.log | grep INFO | wc -l",
+    ],
+    "log-detective": [
+      "grep -c ERROR /var/log/server.log",
+      "grep -v INFO /var/log/server.log",
+      "grep -i error /var/log/server.log",
+      "grep WARN /var/log/server.log | sort | uniq -c",
+      "grep WARN /var/log/server.log | sort | uniq -c > /home/student/warning-report.txt",
+      "wc -l /home/student/warning-report.txt",
     ],
     "find-redirect": [
       "find media -name '*.jpg'",

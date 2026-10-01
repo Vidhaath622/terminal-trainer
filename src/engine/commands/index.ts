@@ -7,12 +7,12 @@ import { parseLine, ParseError, type Pipeline } from "../parser";
 import type { ShellContext, CommandImpl } from "./types";
 import { pwd, cd, ls, mkdir, touch, cp, mv, rm, chmod, tree } from "./fs-commands";
 import { cat, echo, grep, head, tail, wc, sort, uniq, find, man } from "./text-commands";
-import { whoami, date, historyCmd, clearCmd, help } from "./session-commands";
+import { whoami, date, historyCmd, clearCmd, help, say } from "./session-commands";
 
 export const COMMANDS: Record<string, CommandImpl> = {
   pwd, cd, ls, mkdir, touch, cp, mv, rm, chmod, tree,
   cat, echo, grep, head, tail, wc, sort, uniq, find,
-  whoami, date, history: historyCmd, clear: clearCmd, help, man,
+  whoami, date, history: historyCmd, clear: clearCmd, help, man, say,
 };
 
 export function commandNames(): string[] {

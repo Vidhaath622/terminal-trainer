@@ -3,7 +3,7 @@
 /**
  * RelatedTheorySidebar: small card in the step sidebar of /play pages that
  * links back to the relevant theory notes on the home page (/#theory-<id>,
- * which auto-expands that card on arrival).
+ * which auto-expands that card on arrival) and to /commands for the library.
  */
 import Link from "next/link";
 import { relatedTheoryFor, theoryHref } from "@/lib/theory";
@@ -42,9 +42,9 @@ export default function RelatedTheorySidebar({ problemId }: { problemId: string 
         ))}
       </ul>
       <Link
-        href="/#commands"
+        href="/commands"
         className="mt-2.5 block text-center text-[10px] font-medium text-term-muted transition hover:text-term-blue"
-        title="Browse the command library on the home page"
+        title="Browse the full command library"
       >
         ⌘ Command library
       </Link>

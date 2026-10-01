@@ -5,8 +5,9 @@
  * one-line explanation and a runnable example. Search box filters by name or
  * text; category chips narrow the grid. Examples are one-click copy.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { COMMAND_REFERENCE, COMMAND_CATEGORIES, type CommandCategory } from "@/lib/commandReference";
+import { useReveal } from "@/lib/useReveal";
 
 const CATEGORY_ACCENT: Record<CommandCategory, { icon: string; color: string }> = {
   Filesystem: { icon: "▤", color: "text-term-yellow" },
@@ -55,6 +56,7 @@ function CopyButton({ text }: { text: string }) {
 export default function CommandReferenceSection() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CommandCategory | "All">("All");
+  const { ref, shown } = useReveal<HTMLDivElement>();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -70,7 +72,7 @@ export default function CommandReferenceSection() {
   }, [query, category]);
 
   return (
-    <div data-testid="command-library">
+    <div data-testid="command-library" ref={ref} className={`reveal-group ${shown ? "reveal-shown" : "reveal-pending"}`}>
       {/* controls */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative">
@@ -109,12 +111,15 @@ export default function CommandReferenceSection() {
         </p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((c) => {
+          {filtered.map((c, idx) => {
             const accent = CATEGORY_ACCENT[c.category];
             return (
               <article
                 key={c.name}
-                className="card flex flex-col p-4 transition duration-200 hover:-translate-y-0.5 hover:bg-term-raise/40"
+                className={`card reveal-item flex flex-col p-4 hover-lift hover:bg-term-raise/40 ${
+                  c.category === "Session" ? "hover:border-term-green/50" : ""
+                }`}
+                style={{ "--i": Math.min(idx, 11) } as CSSProperties}
                 data-testid={`command-card-${c.name === "| (pipe)" ? "pipe" : c.name.replace(/[^a-z]/gi, "")}`}
               >
                 <div className="flex items-center justify-between gap-2">

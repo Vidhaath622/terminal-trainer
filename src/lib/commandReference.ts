@@ -157,7 +157,7 @@ export const COMMAND_REFERENCE: CommandEntry[] = [
     category: "Text",
     summary: "Collapse repeated adjacent lines.",
     example: "uniq sorted.txt",
-    exampleNote: "Each run of identical lines collapses to one. (Only adjacent duplicates merge — sort first.)",
+    exampleNote: "Each run of identical lines collapses to one. (Only adjacent duplicates merge — sort first. Add -c to prefix each line with its count.)",
   },
   {
     name: "find",
@@ -209,6 +209,13 @@ export const COMMAND_REFERENCE: CommandEntry[] = [
     summary: "List every command the simulator supports, grouped by kind.",
     example: "help",
     exampleNote: "Quick in-terminal reminder of what is available (shorter than man).",
+  },
+  {
+    name: "say",
+    category: "Session",
+    summary: "Speaks the sentence out loud (simulated).",
+    example: "say Terminal is fun",
+    exampleNote: "On a real Mac this is the macOS `say` voice; in the simulator it echoes the sentence back.",
   },
 
   // --- Operators ----------------------------------------------------------

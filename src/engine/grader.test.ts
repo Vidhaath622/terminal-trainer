@@ -15,7 +15,7 @@ function makeProblem(step: Partial<Step> & { checks: Check[] }): Problem {
   });
 }
 
-function grade(checks: Check[], opts: { files?: { path: string; content: string }[]; dirs?: string[]; commands?: string[]; lastOutput?: string; modes?: Record<string, string> } = {}) {
+function grade(checks: Check[], opts: { files?: { path: string; content: string }[]; dirs?: string[]; commands?: string[]; lastOutput?: string; lastError?: string | null; modes?: Record<string, string> } = {}) {
   const vfs = new Vfs({ files: opts.files ?? [], dirs: opts.dirs ?? [] });
   for (const [p, m] of Object.entries(opts.modes ?? {})) vfs.chmod(vfs.resolve(p), m);
   const problem = makeProblem({ checks });
@@ -24,6 +24,7 @@ function grade(checks: Check[], opts: { files?: { path: string; content: string 
     vfs,
     stepCommands: opts.commands ?? [],
     lastOutput: opts.lastOutput ?? "",
+    lastError: opts.lastError ?? null,
     problem,
     step,
   });
@@ -138,10 +139,10 @@ describe("command usage checks", () => {
     const vfs = new Vfs({ dirs: ["/home/student/docs"] });
     vfs.cwd = "/home/student/docs";
     const problem = makeProblem({ checks: [{ type: "cwdEquals", path: "/home/student/docs", marks: 3 }] });
-    const r = gradeStep({ vfs, stepCommands: ["cd /home/student/docs"], lastOutput: "", problem, step: problem.steps[0] });
+    const r = gradeStep({ vfs, stepCommands: ["cd /home/student/docs"], lastOutput: "", lastError: null, problem, step: problem.steps[0] });
     expect(r.passed).toBe(true);
     const vfs2 = new Vfs();
-    const r2 = gradeStep({ vfs: vfs2, stepCommands: [], lastOutput: "", problem, step: problem.steps[0] });
+    const r2 = gradeStep({ vfs: vfs2, stepCommands: [], lastOutput: "", lastError: null, problem, step: problem.steps[0] });
     expect(r2.passed).toBe(false);
   });
 });
@@ -217,11 +218,42 @@ describe("schema validation", () => {
   });
 });
 
+describe("error checks", () => {
+  it("errorContains passes when the last command's error includes the value", () => {
+    const r = grade([{ type: "errorContains", value: "Is a directory", marks: 4 }], {
+      lastError: "rm: cannot remove '/d': Is a directory",
+    });
+    expect(r.passed).toBe(true);
+    expect(r.earned).toBe(4);
+  });
+
+  it("errorContains fails when the last command printed no error", () => {
+    const r = grade([{ type: "errorContains", value: "Is a directory", marks: 4 }], { lastError: null });
+    expect(r.passed).toBe(false);
+    expect(r.results[0].message).toContain("no error printed");
+  });
+
+  it("errorContains fails when the error lacks the value", () => {
+    const r = grade([{ type: "errorContains", value: "Is a directory", marks: 4 }], {
+      lastError: "rm: cannot remove '/ghost': No such file or directory",
+    });
+    expect(r.passed).toBe(false);
+  });
+
+  it("errorContains is accepted by the schema", () => {
+    const step = stepSchema.parse({
+      id: "s", prompt: "P", marks: 4,
+      checks: [{ type: "errorContains", value: "Is a directory", marks: 4 }],
+    });
+    expect(step.checks[0].type).toBe("errorContains");
+  });
+});
+
 describe("evaluateCheck message quality", () => {
   it("gives useful failure messages", () => {
     const vfs = new Vfs();
     const r = evaluateCheck({ type: "fileExists", path: "/missing", marks: 1 }, {
-      vfs, stepCommands: [], lastOutput: "",
+      vfs, stepCommands: [], lastOutput: "", lastError: null,
       problem: makeProblem({ checks: [{ type: "fileExists", path: "/missing", marks: 1 }] }),
       step: makeProblem({ checks: [{ type: "fileExists", path: "/missing", marks: 1 }] }).steps[0],
     });
