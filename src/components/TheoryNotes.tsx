@@ -55,7 +55,7 @@ function TheoryNotesInner() {
           <article
             key={t.id}
             id={`theory-${t.id}`}
-            className={`card scroll-mt-24 ${
+            className={`card min-w-0 scroll-mt-24 ${
               open ? "border-term-border bg-term-raise/60" : ""
             }`}
           >
