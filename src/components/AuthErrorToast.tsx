@@ -27,10 +27,10 @@ export default function AuthErrorToast() {
   return (
     <div
       role="alert"
-      className="fixed inset-x-0 top-4 z-50 mx-auto w-fit max-w-[90vw] animate-slideUp rounded-lg border border-term-red/40 bg-term-panel px-4 py-2.5 text-sm text-term-red shadow-card"
+      className="fixed inset-x-0 top-4 z-50 mx-auto w-fit max-w-[90vw] rounded border border-term-red/40 bg-term-panel px-4 py-2.5 text-sm text-term-red"
       data-testid="auth-error-toast"
     >
-      ⚠ GitHub sign-in failed: {message}
+      GitHub sign-in failed: {message}
     </div>
   );
 }

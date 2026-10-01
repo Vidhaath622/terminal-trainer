@@ -13,7 +13,7 @@ export default function GithubAuthButton({ compact = false }: { compact?: boolea
   if (loading) {
     return (
       <div
-        className={`animate-pulse rounded-lg border border-term-border bg-term-raise/60 ${compact ? "h-8 w-24" : "h-10 w-36"}`}
+        className={`animate-pulse rounded border border-term-border bg-term-raise/60 ${compact ? "h-8 w-24" : "h-10 w-36"}`}
         aria-hidden
       />
     );
@@ -23,7 +23,7 @@ export default function GithubAuthButton({ compact = false }: { compact?: boolea
     return (
       <Link
         href="/account"
-        className="group flex items-center gap-2 rounded-lg border border-term-border glass px-3 py-2 text-sm font-medium text-term-text transition hover:border-term-blue/50"
+        className="flex items-center gap-2 rounded border border-term-border bg-term-panel px-3 py-2 text-sm font-medium text-term-text hover:border-term-green/60"
         data-testid="github-account-link"
         title="View your synced progress"
       >
@@ -43,7 +43,7 @@ export default function GithubAuthButton({ compact = false }: { compact?: boolea
   return (
     <a
       href="/api/auth/github"
-      className="shine flex items-center gap-2 rounded-lg bg-term-panel px-4 py-2.5 text-sm font-semibold text-term-text ring-1 ring-term-border transition hover:border-term-blue/50 hover:text-term-blue"
+      className="flex items-center gap-2 rounded bg-term-panel px-4 py-2 font-mono text-sm font-semibold text-term-text ring-1 ring-term-border hover:ring-term-green/60"
       data-testid="github-signin-btn"
     >
       <svg viewBox="0 0 16 16" className="h-4 w-4 fill-current" aria-hidden>
