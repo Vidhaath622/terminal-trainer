@@ -15,6 +15,8 @@ describe("apiRouteAllowed", () => {
     expect(apiRouteAllowed("GET", "/api/auth/callback/github")).toBe("allow");
     expect(apiRouteAllowed("POST", "/api/auth/logout")).toBe("allow");
     expect(apiRouteAllowed("DELETE", "/api/account")).toBe("allow");
+    expect(apiRouteAllowed("GET", "/api/admin/users")).toBe("allow");
+    expect(apiRouteAllowed("PATCH", "/api/admin/users/123")).toBe("allow");
   });
 
   it("404s every authoring-shaped path (remote editor access is impossible)", () => {
@@ -63,17 +65,23 @@ describe("apiRouteAllowed", () => {
 });
 
 describe("API_ROUTES table", () => {
-  it("only PUT-progress, POST-logout and DELETE-account change state", () => {
+  it("only the four known routes change state", () => {
     const stateChanging = API_ROUTES.filter((r) => r.method !== "GET")
       .map((r) => `${r.method} ${r.pattern}`)
       .sort();
     expect(stateChanging).toEqual(
-      ["DELETE /api/account", "POST /api/auth/logout", "PUT /api/progress/:problemId"].sort()
+      [
+        "DELETE /api/account",
+        "PATCH /api/admin/users/:githubId",
+        "POST /api/auth/logout",
+        "PUT /api/progress/:problemId",
+      ].sort()
     );
   });
 
-  it("has no PATCH routes at all and no state-changing route outside auth/progress/account", () => {
-    expect(API_ROUTES.some((r) => r.method === "PATCH")).toBe(false);
+  it("the only PATCH is the owner role assignment; no state-changing route outside auth/progress/account/admin", () => {
+    const patches = API_ROUTES.filter((r) => r.method === "PATCH").map((r) => r.pattern);
+    expect(patches).toEqual(["/api/admin/users/:githubId"]);
     expect(
       API_ROUTES.some(
         (r) =>
@@ -81,7 +89,8 @@ describe("API_ROUTES table", () => {
           !r.pattern.startsWith("/api/auth/") &&
           r.pattern !== "/api/auth/logout" &&
           !r.pattern.startsWith("/api/progress") &&
-          r.pattern !== "/api/account"
+          r.pattern !== "/api/account" &&
+          !r.pattern.startsWith("/api/admin/users")
       )
     ).toBe(false);
   });

@@ -34,8 +34,9 @@ npm run build      # production build
 | Account dashboard | `src/app/account`, `src/components/AccountClient.tsx` | synced marks & progress |
 
 Routes: `/` (home) · `/problems` (catalog) · `/git-problems` (Git problems) · `/play/[id]` (practice) · `/embed` (iframe widget) ·
-`/teacher` (role console) · `/quiz` (quiz demo) · `/docs/embed` (integration guide) ·
-`/account` (GitHub-linked progress) · `/api/*` (auth + progress functions).
+`/teacher` (role demo) · `/admin` (owner role panel) · `/quiz` (quiz demo) ·
+`/docs/embed` (integration guide) · `/account` (GitHub-linked progress) ·
+`/api/*` (auth + progress functions).
 
 ## GitHub accounts & cloud progress sync
 
@@ -84,10 +85,16 @@ Protocol types: `src/embed/protocol.ts`.
   outside the explicit allowlist (`src/server/api-allowlist.ts` — progress sync, `/api/me`,
   OAuth, logout, account deletion). `src/server/route-surface.test.ts` fails CI if a route file
   and the allowlist ever disagree, so an authoring endpoint cannot appear by accident.
-- **Server-authoritative roles**: role is computed server-side from deploy-time env allowlists
-  (`ADMIN_GITHUB_IDS`/`ADMIN_LOGINS`/`TEACHER_GITHUB_IDS`/`TEACHER_LOGINS` →
-  `src/server/authz.ts`, reported on `/api/me`) and defaults to `student` (zero authoring caps).
-  Capability checks take session identity only — a client-asserted role can never reach one.
+- **Server-authoritative roles**: role is computed server-side (`src/server/authz.ts`, reported
+  on `/api/me`) with the precedence **owner → panel assignment → env allowlist → student**.
+  `ADMIN_GITHUB_IDS`/`ADMIN_LOGINS`/`TEACHER_GITHUB_IDS`/`TEACHER_LOGINS` seed and fall back;
+  anonymous visitors are always `student` (zero authoring caps). Capability checks take session
+  identity only — a client-asserted role can never reach one.
+- **Owner-only role panel**: `/admin` + `GET/PATCH /api/admin/users*` are gated on
+  `OWNER_GITHUB_IDS`/`OWNER_LOGINS` — 401 without a session, 403 for everyone else (env-admins
+  included), CSRF-checked, rate-limited, and `role` is schema-validated to `student|teacher`,
+  so `admin`/`owner` can never be granted over the API. Assignments live in `users.role`
+  (stamped `role_assigned_at`) and survive re-logins (`ON CONFLICT` never touches them).
 - **Embed hardening**: the widget only accepts `tt:` commands from its parent window;
   hosts can pin origins with `&origin=https://their-site.edu` (also used as the outbound
   `postMessage` target), and **inline host-authored problem JSON is rejected** — remote
@@ -100,9 +107,13 @@ Protocol types: `src/embed/protocol.ts`.
 - **Admins** manage users and inherit everything.
 
 Enforced by typed capability guards (`src/roles/types.ts`) used by the content store, and
-server-side by `src/server/authz.ts` (env allowlists, session-shaped input only). Role truth
-is always server-computed (`/api/me`); the `/teacher` console's "acting as" switcher is an
-explicitly local demo — there is no authoring API anywhere.
+server-side by `src/server/authz.ts` (session-shaped input only). Role truth is always
+server-computed (`/api/me`); the `/teacher` console's "acting as" switcher is an explicitly
+local demo — there is no authoring API anywhere.
+
+Roles are assigned by the owner through the **`/admin` panel** (owner-only; student/teacher
+per signed-in GitHub account, stored in `users.role`). Resolution order: owner → panel
+assignment → env allowlist → student.
 
 ## Testing
 

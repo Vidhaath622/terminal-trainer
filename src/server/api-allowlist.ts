@@ -28,10 +28,19 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", pattern: "/api/auth/callback/github" },
   { method: "POST", pattern: "/api/auth/logout" },
   { method: "DELETE", pattern: "/api/account" },
+  // Owner-only role panel (401/403 for everyone but the owner env identity).
+  { method: "GET", pattern: "/api/admin/users" },
+  { method: "PATCH", pattern: "/api/admin/users/:githubId" },
 ];
 
 /** The only path prefixes the app serves; nothing authoring-shaped lives here. */
-export const ALLOWED_PREFIXES = ["/api/progress", "/api/me", "/api/auth", "/api/account"] as const;
+export const ALLOWED_PREFIXES = [
+  "/api/progress",
+  "/api/me",
+  "/api/auth",
+  "/api/account",
+  "/api/admin",
+] as const;
 
 export type ApiVerdict = "allow" | "not-found" | "method-not-allowed";
 

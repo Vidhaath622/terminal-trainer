@@ -16,8 +16,10 @@ export interface GithubUser {
   name: string | null;
   avatarUrl: string | null;
   createdAt: string | null;
-  /** Server-computed role (env allowlists); never trust a client-asserted one. */
+  /** Effective server-computed role; never trust a client-asserted one. */
   role: Role;
+  /** True only for the owner-named account (gates the /admin panel UI). */
+  isOwner: boolean;
 }
 
 /** Fetch the signed-in user (or null) from /api/me. */

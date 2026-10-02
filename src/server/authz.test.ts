@@ -4,10 +4,25 @@
  * client-asserted role field.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { roleFor, serverCan, requireServerCapability, type SessionIdentity } from "./authz";
-import { AccessDeniedError, type Capability } from "@/roles/types";
+import {
+  roleFor,
+  serverCan,
+  requireServerCapability,
+  isOwner,
+  effectiveRole,
+  normalizeRole,
+  type SessionIdentity,
+} from "./authz";
+import { AccessDeniedError, type Capability, type Role } from "@/roles/types";
 
-const ENV_KEYS = ["ADMIN_GITHUB_IDS", "ADMIN_LOGINS", "TEACHER_GITHUB_IDS", "TEACHER_LOGINS"];
+const ENV_KEYS = [
+  "ADMIN_GITHUB_IDS",
+  "ADMIN_LOGINS",
+  "TEACHER_GITHUB_IDS",
+  "TEACHER_LOGINS",
+  "OWNER_GITHUB_IDS",
+  "OWNER_LOGINS",
+];
 
 const session = (githubId = 101, login = "someone"): SessionIdentity => ({ githubId, login });
 
@@ -112,5 +127,86 @@ describe("server capability checks", () => {
     const forged = { githubId: 666, login: "eve", role: "admin" } as unknown as SessionIdentity;
     expect(roleFor(forged)).toBe("student");
     expect(serverCan(forged, "problem:edit")).toBe(false);
+  });
+});
+
+describe("isOwner", () => {
+  it("is false by default, for anonymous and for ordinary sessions", () => {
+    expect(isOwner(session())).toBe(false);
+    expect(isOwner(session(1, "octocat"))).toBe(false);
+    expect(isOwner(null)).toBe(false);
+    expect(isOwner(undefined)).toBe(false);
+  });
+
+  it("matches OWNER_GITHUB_IDS and OWNER_LOGINS (logins case-insensitive)", () => {
+    vi.stubEnv("OWNER_GITHUB_IDS", " 99 , 100 ");
+    vi.stubEnv("OWNER_LOGINS", "TheOwner");
+    expect(isOwner(session(99))).toBe(true);
+    expect(isOwner(session(100))).toBe(true);
+    expect(isOwner(session(1, "theowner"))).toBe(true);
+    expect(isOwner(session(1, "theowner2"))).toBe(false);
+    expect(isOwner(session(98))).toBe(false);
+  });
+
+  it("the owner resolves to admin; env-admins are NOT owners", () => {
+    vi.stubEnv("OWNER_GITHUB_IDS", "5");
+    vi.stubEnv("ADMIN_GITHUB_IDS", "6");
+    expect(roleFor(session(5))).toBe("admin");
+    expect(serverCan(session(5), "user:manage")).toBe(true);
+    expect(isOwner(session(6))).toBe(false);
+  });
+});
+
+describe("effectiveRole precedence", () => {
+  const assigned = (role: Role) => ({ role, roleAssignedAt: "2026-10-02T00:00:00.000Z" });
+  const unassigned = (role: Role) => ({ role, roleAssignedAt: null });
+
+  it("owner wins over a stored panel row", () => {
+    vi.stubEnv("OWNER_GITHUB_IDS", "5");
+    expect(effectiveRole(session(5), assigned("student"))).toBe("admin");
+    expect(effectiveRole(session(5), null)).toBe("admin");
+  });
+
+  it("panel assignment wins over env allowlists", () => {
+    vi.stubEnv("TEACHER_GITHUB_IDS", "42");
+    vi.stubEnv("ADMIN_GITHUB_IDS", "42");
+    expect(effectiveRole(session(42), assigned("student"))).toBe("student");
+    expect(effectiveRole(session(42), assigned("teacher"))).toBe("teacher");
+  });
+
+  it("env allowlists still govern rows the panel never touched", () => {
+    vi.stubEnv("TEACHER_GITHUB_IDS", "42");
+    expect(effectiveRole(session(42), unassigned("student"))).toBe("teacher");
+    expect(effectiveRole(session(7), unassigned("student"))).toBe("student");
+    expect(effectiveRole(session(7), null)).toBe("student");
+  });
+
+  it("falls back to env then student when there is no DB row", () => {
+    vi.stubEnv("TEACHER_LOGINS", "ada");
+    expect(effectiveRole(session(1, "ada"), null)).toBe("teacher");
+    expect(effectiveRole(session(1, "bob"), null)).toBe("student");
+  });
+
+  it("anonymous is always student, even with a row in hand", () => {
+    expect(effectiveRole(null, assigned("teacher"))).toBe("student");
+    expect(effectiveRole(null, null)).toBe("student");
+  });
+
+  it("coerces junk stored roles to student", () => {
+    expect(
+      effectiveRole(session(1), { role: "superuser" as Role, roleAssignedAt: "2026-10-02" })
+    ).toBe("student");
+  });
+});
+
+describe("normalizeRole", () => {
+  it("accepts the three roles and defaults everything else to student", () => {
+    expect(normalizeRole("admin")).toBe("admin");
+    expect(normalizeRole("teacher")).toBe("teacher");
+    expect(normalizeRole("student")).toBe("student");
+    expect(normalizeRole("ADMIN")).toBe("student");
+    expect(normalizeRole(null)).toBe("student");
+    expect(normalizeRole(undefined)).toBe("student");
+    expect(normalizeRole(42)).toBe("student");
   });
 });

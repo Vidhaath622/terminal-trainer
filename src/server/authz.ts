@@ -30,15 +30,61 @@ function envHasLogin(raw: string | undefined, login: string): boolean {
   return envList(raw).some((entry) => entry.toLowerCase() === target);
 }
 
-/** Resolve the server-side role for a session identity (or anonymous). */
+/**
+ * True when the session belongs to the site owner, named by OWNER_GITHUB_IDS /
+ * OWNER_LOGINS at deploy time. The owner-only /admin panel and its API check
+ * this — it is deliberately stricter than any role: even `admin` env entries
+ * are not owners.
+ */
+export function isOwner(session: SessionIdentity | null | undefined): boolean {
+  if (!session) return false;
+  const id = String(session.githubId);
+  if (envList(process.env.OWNER_GITHUB_IDS).includes(id)) return true;
+  return envHasLogin(process.env.OWNER_LOGINS, session.login);
+}
+
+/** Best-effort coercion of a stored role value; anything unknown means student. */
+export function normalizeRole(value: unknown): Role {
+  return value === "admin" || value === "teacher" || value === "student" ? value : "student";
+}
+
+/** Resolve the environment-derived role for a session identity (or anonymous). */
 export function roleFor(session: SessionIdentity | null | undefined): Role {
   if (!session) return "student";
+  if (isOwner(session)) return "admin";
   const id = String(session.githubId);
   if (envList(process.env.ADMIN_GITHUB_IDS).includes(id)) return "admin";
   if (envHasLogin(process.env.ADMIN_LOGINS, session.login)) return "admin";
   if (envList(process.env.TEACHER_GITHUB_IDS).includes(id)) return "teacher";
   if (envHasLogin(process.env.TEACHER_LOGINS, session.login)) return "teacher";
   return "student";
+}
+
+/**
+ * The stored role state for a signed-in account (from the users table).
+ * `roleAssignedAt` is set only when the owner assigned it in the /admin panel.
+ */
+export interface DbRoleState {
+  role: Role;
+  roleAssignedAt: string | null;
+}
+
+/**
+ * The role the app actually enforces, in precedence order:
+ *   1. owner -> always "admin" (un-overridable, even by a panel row)
+ *   2. panel assignment (roleAssignedAt set) -> the stored users.role
+ *   3. env allowlists (roleFor) — still live for rows the panel never touched
+ *   4. "student"
+ * Anonymous visitors always land on "student", which holds zero authoring caps.
+ */
+export function effectiveRole(
+  session: SessionIdentity | null | undefined,
+  db: DbRoleState | null | undefined
+): Role {
+  if (!session) return "student"; // anonymous never inherits anyone's row
+  if (isOwner(session)) return "admin";
+  if (db && db.roleAssignedAt !== null) return normalizeRole(db.role);
+  return roleFor(session);
 }
 
 /** Capability check driven purely by the server-resolved role. */

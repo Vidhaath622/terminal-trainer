@@ -64,3 +64,4 @@ export const authCallbackLimiter = new RateLimiter(20, 60_000);
 export const progressPutLimiter = new RateLimiter(120, 60_000);
 export const accountLimiter = new RateLimiter(10, 60_000);
 export const logoutLimiter = new RateLimiter(10, 60_000);
+export const adminLimiter = new RateLimiter(60, 60_000);

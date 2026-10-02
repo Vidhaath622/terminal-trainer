@@ -3,11 +3,15 @@
  * needs no migration tooling — point DATABASE_URL at a fresh Neon database
  * and the first request sets up the schema.
  *
- * users(github_id PK)  — GitHub identity per account
+ * users(github_id PK)  — GitHub identity per account, plus the role the owner
+ *   panel assigns (role; role_assigned_at stays NULL until the panel sets it,
+ *   which is what lets env allowlists keep governing untouched rows).
  * progress(github_id + problem_id) — one JSONB blob per problem, mirroring
  * the client's SessionProgress shape.
  */
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import type { Role } from "@/roles/types";
+import { normalizeRole } from "./authz";
 
 let client: NeonQueryFunction<false, false> | null = null;
 let initPromise: Promise<void> | null = null;
@@ -40,6 +44,13 @@ async function ensureTables(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           PRIMARY KEY (github_id, problem_id)
         )`;
+      // Role columns: added lazily so pre-existing databases upgrade in place.
+      // Existing rows land as role='student' + NULL role_assigned_at, i.e.
+      // "never assigned by the panel" — env allowlists still govern them.
+      await sql`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'student';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS role_assigned_at TIMESTAMPTZ;
+      `;
     })().catch((err) => {
       initPromise = null; // allow retry on a later request
       throw err;
@@ -54,42 +65,48 @@ export interface DbUser {
   name: string | null;
   avatarUrl: string | null;
   createdAt: string;
+  /** stored role — effective only once roleAssignedAt is set (see authz.effectiveRole) */
+  role: Role;
+  /** when the owner assigned a role in the /admin panel; null = never */
+  roleAssignedAt: string | null;
+}
+
+function rowToUser(r: Record<string, unknown>): DbUser {
+  return {
+    githubId: Number(r.github_id),
+    login: String(r.login),
+    name: (r.name as string | null) ?? null,
+    avatarUrl: (r.avatar_url as string | null) ?? null,
+    createdAt: new Date(r.created_at as string | Date).toISOString(),
+    role: normalizeRole(r.role),
+    roleAssignedAt: r.role_assigned_at
+      ? new Date(r.role_assigned_at as string | Date).toISOString()
+      : null,
+  };
 }
 
 export async function upsertUser(
-  user: Omit<DbUser, "createdAt">
+  user: Pick<DbUser, "githubId" | "login" | "name" | "avatarUrl">
 ): Promise<DbUser> {
   await ensureTables();
+  // ON CONFLICT never touches role/role_assigned_at: panel assignments survive
+  // every re-login, and a fresh row lands with the defaults (student / NULL).
   const rows = await getClient()`
     INSERT INTO users (github_id, login, name, avatar_url)
     VALUES (${user.githubId}, ${user.login}, ${user.name}, ${user.avatarUrl})
     ON CONFLICT (github_id) DO UPDATE
       SET login = EXCLUDED.login, name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url
-    RETURNING github_id, login, name, avatar_url, created_at`;
-  const r = rows[0];
-  return {
-    githubId: Number(r.github_id),
-    login: r.login,
-    name: r.name,
-    avatarUrl: r.avatar_url,
-    createdAt: (r.created_at as Date).toISOString(),
-  };
+    RETURNING github_id, login, name, avatar_url, created_at, role, role_assigned_at`;
+  return rowToUser(rows[0]);
 }
 
 export async function getUser(githubId: number): Promise<DbUser | null> {
   await ensureTables();
   const rows = await getClient()`
-    SELECT github_id, login, name, avatar_url, created_at
+    SELECT github_id, login, name, avatar_url, created_at, role, role_assigned_at
     FROM users WHERE github_id = ${githubId}`;
   const r = rows[0];
-  if (!r) return null;
-  return {
-    githubId: Number(r.github_id),
-    login: r.login,
-    name: r.name,
-    avatarUrl: r.avatar_url,
-    createdAt: (r.created_at as Date).toISOString(),
-  };
+  return r ? rowToUser(r) : null;
 }
 
 export interface ProgressRow {
@@ -147,4 +164,27 @@ export async function deleteAccount(githubId: number): Promise<void> {
   await ensureTables();
   // progress rows cascade; session cookie is cleared by the route
   await getClient()`DELETE FROM users WHERE github_id = ${githubId}`;
+}
+
+/** Every signed-in account, newest first — the owner panel's roster. */
+export async function listUsersWithRoles(): Promise<DbUser[]> {
+  await ensureTables();
+  const rows = await getClient()`
+    SELECT github_id, login, name, avatar_url, created_at, role, role_assigned_at
+    FROM users ORDER BY created_at DESC, github_id DESC`;
+  return rows.map((r) => rowToUser(r));
+}
+
+/**
+ * Owner-panel role assignment. Stamps role_assigned_at, so from then on the
+ * panel value wins over the env allowlists (see authz.effectiveRole).
+ * Returns false when no such account exists.
+ */
+export async function setUserRole(githubId: number, role: Role): Promise<boolean> {
+  await ensureTables();
+  const rows = await getClient()`
+    UPDATE users SET role = ${role}, role_assigned_at = now()
+    WHERE github_id = ${githubId}
+    RETURNING github_id`;
+  return rows.length > 0;
 }

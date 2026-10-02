@@ -15,6 +15,11 @@ export function unauthorized(): NextResponse {
   return NextResponse.json({ error: "not signed in" }, { status: 401 });
 }
 
+/**403 — authenticated but not allowed (e.g. not the owner). */
+export function forbidden(message = "forbidden"): NextResponse {
+  return NextResponse.json({ error: message }, { status: 403 });
+}
+
 export function serverError(message: string): NextResponse {
   return NextResponse.json({ error: message }, { status: 500 });
 }
