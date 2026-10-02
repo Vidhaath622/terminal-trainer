@@ -22,7 +22,12 @@ const nextConfig = {
 
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      // 'unsafe-eval' only in development: `next dev` ships webpack
+      // eval-source-map chunks, and without it the browser refuses every
+      // module, React never hydrates, and client UI (e.g. the GitHub
+      // sign-in button) never renders. Production bundles never use eval,
+      // so the shipped policy stays exactly as strict as before.
+      `script-src 'self' 'unsafe-inline'${production ? "" : " 'unsafe-eval'"}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https://avatars.githubusercontent.com",
       "font-src 'self' data:",

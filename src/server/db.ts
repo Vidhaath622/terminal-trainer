@@ -47,9 +47,14 @@ async function ensureTables(): Promise<void> {
       // Role columns: added lazily so pre-existing databases upgrade in place.
       // Existing rows land as role='student' + NULL role_assigned_at, i.e.
       // "never assigned by the panel" — env allowlists still govern them.
+      // One statement per query: the Neon HTTP driver prepares each query, and
+      // Postgres rejects multiple commands in a single prepared statement
+      // ("cannot insert multiple commands into a prepared statement").
       await sql`
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'student';
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS role_assigned_at TIMESTAMPTZ;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'student'
+      `;
+      await sql`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS role_assigned_at TIMESTAMPTZ
       `;
     })().catch((err) => {
       initPromise = null; // allow retry on a later request
