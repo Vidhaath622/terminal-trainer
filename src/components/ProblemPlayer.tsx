@@ -17,6 +17,7 @@ import SyncChip, { type SyncState } from "./SyncChip";
 import RelatedTheorySidebar from "./RelatedTheorySidebar";
 import { Session, type SessionEvent, type SessionProgress, type StorageLike } from "@/engine/session";
 import { maxMarks, type GradeResult } from "@/engine/grader";
+import { LAUNCH_PROBLEMS } from "@/problems/launch";
 import type { Problem } from "@/engine/schema";
 
 export interface ProblemPlayerProps {
@@ -60,6 +61,9 @@ const COMPLETE_BANNER_CLASS =
   "mt-3 rounded border border-term-green/50 bg-term-green/10 p-3 text-xs font-medium text-term-green";
 const PRACTICE_BANNER_CLASS =
   "mt-3 rounded border border-term-border bg-term-panel p-3 text-xs font-medium text-term-text";
+/** Bottom-bar CTA shown once a problem is finished: next in /problems order, or back to the library. */
+const NEXT_LINK_CLASS =
+  "ml-auto shrink-0 rounded bg-term-green/20 px-4 py-2 font-mono text-xs font-bold text-term-green ring-1 ring-term-green/40 hover:bg-term-green/30";
 
 export default function ProblemPlayer({
   problem,
@@ -154,6 +158,10 @@ export default function ProblemPlayer({
   const totalMax = maxMarks(problem);
   const done = session.isComplete;
   const currentIdx = Math.min(session.currentStepIndex, problem.steps.length - 1);
+  // Position in the /problems set: drives the "next problem" CTA once finished.
+  // -1 for a foreign problem (defensive: no button rendered).
+  const problemIndex = LAUNCH_PROBLEMS.findIndex((p) => p.id === problem.id);
+  const nextProblem = problemIndex >= 0 ? LAUNCH_PROBLEMS[problemIndex + 1] : undefined;
 
   const pct = totalMax === 0 ? 0 : Math.round((session.earned / totalMax) * 100);
 
@@ -346,6 +354,26 @@ export default function ProblemPlayer({
               <span className="font-mono text-xs text-term-muted">
                 Step {Math.min(currentIdx + 1, problem.steps.length)} of {problem.steps.length}
               </span>
+              {done && !compact && problemIndex >= 0 &&
+                (nextProblem ? (
+                  <Link
+                    href={`/play/${nextProblem.id}`}
+                    className={NEXT_LINK_CLASS}
+                    data-testid="next-problem-btn"
+                    title={`Next: ${nextProblem.title}`}
+                  >
+                    Next problem →
+                  </Link>
+                ) : (
+                  <Link
+                    href="/problems"
+                    className={NEXT_LINK_CLASS}
+                    data-testid="next-problem-btn"
+                    title="Back to the problem library"
+                  >
+                    Back to problems
+                  </Link>
+                ))}
             </div>
             {grade && !done && (
               <div className="mt-2.5 space-y-1" data-testid="verify-results">
