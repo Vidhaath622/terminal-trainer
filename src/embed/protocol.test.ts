@@ -3,6 +3,10 @@ import {
   isHostToWidget,
   parseHostProblem,
   connectWidget,
+  isAllowedHostMessage,
+  parseAllowedOrigins,
+  inlineProblemTooLarge,
+  MAX_INLINE_PROBLEM_JSON_BYTES,
   type WidgetToHostMessage,
 } from "./protocol";
 
@@ -39,6 +43,74 @@ describe("parseHostProblem", () => {
     const result = parseHostProblem({ id: "bad" });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe("parseAllowedOrigins", () => {
+  it("parses a comma-separated list into normalized origins", () => {
+    expect(parseAllowedOrigins("https://college.edu, http://localhost:3000")).toEqual([
+      "https://college.edu",
+      "http://localhost:3000",
+    ]);
+    expect(parseAllowedOrigins("https://college.edu/path#frag")).toEqual(["https://college.edu"]);
+  });
+
+  it("returns an empty list for nothing, junk, or non-http schemes", () => {
+    expect(parseAllowedOrigins(null)).toEqual([]);
+    expect(parseAllowedOrigins(undefined)).toEqual([]);
+    expect(parseAllowedOrigins("")).toEqual([]);
+    expect(parseAllowedOrigins("not a url")).toEqual([]);
+    expect(parseAllowedOrigins("javascript:alert(1)")).toEqual([]);
+    expect(parseAllowedOrigins("https://a.edu, junk, https://b.edu")).toEqual([
+      "https://a.edu",
+      "https://b.edu",
+    ]);
+  });
+});
+
+describe("isAllowedHostMessage", () => {
+  it("accepts the parent window with no origin pin (public embed)", () => {
+    expect(
+      isAllowedHostMessage({ origin: "https://any-college.edu", sourceIsParent: true, allowedOrigins: [] })
+    ).toBe(true);
+  });
+
+  it("rejects senders that are not the parent window", () => {
+    expect(
+      isAllowedHostMessage({ origin: "https://any-college.edu", sourceIsParent: false, allowedOrigins: [] })
+    ).toBe(false);
+    expect(
+      isAllowedHostMessage({ origin: "https://any-college.edu", sourceIsParent: false, allowedOrigins: ["https://any-college.edu"] })
+    ).toBe(false);
+  });
+
+  it("enforces the origin allowlist when pinned", () => {
+    const allowedOrigins = ["https://college.edu"];
+    expect(
+      isAllowedHostMessage({ origin: "https://college.edu", sourceIsParent: true, allowedOrigins })
+    ).toBe(true);
+    expect(
+      isAllowedHostMessage({ origin: "https://evil.example", sourceIsParent: true, allowedOrigins })
+    ).toBe(false);
+  });
+});
+
+describe("inlineProblemTooLarge", () => {
+  it("accepts normal problem payloads", () => {
+    expect(inlineProblemTooLarge({ id: "x", title: "small" })).toBe(false);
+    expect(inlineProblemTooLarge(null)).toBe(false);
+    expect(inlineProblemTooLarge(undefined)).toBe(false);
+  });
+
+  it("rejects payloads over the byte cap", () => {
+    const big = { blob: "x".repeat(MAX_INLINE_PROBLEM_JSON_BYTES) };
+    expect(inlineProblemTooLarge(big)).toBe(true);
+  });
+
+  it("rejects values that cannot be serialized", () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    expect(inlineProblemTooLarge(circular)).toBe(true);
   });
 });
 

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { currentUser, serverError, unauthorized } from "@/server/http";
+import { assertSameOrigin, currentUser, rateLimited, serverError, unauthorized } from "@/server/http";
+import { accountLimiter } from "@/server/ratelimit";
 import { deleteAccount } from "@/server/db";
 import { SESSION_COOKIE } from "@/server/session";
 
@@ -10,6 +11,13 @@ import { SESSION_COOKIE } from "@/server/session";
 export async function DELETE(req: NextRequest) {
   const session = currentUser(req);
   if (!session) return unauthorized();
+
+  const csrf = assertSameOrigin(req);
+  if (csrf) return csrf;
+
+  const limited = rateLimited(accountLimiter.check(`user:${session.githubId}`));
+  if (limited) return limited;
+
   try {
     await deleteAccount(session.githubId);
     const res = NextResponse.json({ ok: true });

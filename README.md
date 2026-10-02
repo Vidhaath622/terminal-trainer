@@ -29,7 +29,7 @@ npm run build      # production build
 | Roles | `src/roles/` | Teacher/student/admin capabilities, quizzes, submissions |
 | Embed API | `src/embed/protocol.ts` | postMessage types + host helper |
 | UI | `src/components/`, `src/app/` | xterm terminal, player, teacher console, docs |
-| GitHub auth + sync | `src/server/`, `src/lib/sync.ts` | OAuth, Neon Postgres, signed cookies |
+| GitHub auth + sync | `src/server/`, `src/lib/sync.ts` | OAuth, Neon Postgres, encrypted session cookies |
 | Account dashboard | `src/app/account`, `src/components/AccountClient.tsx` | synced marks & progress |
 
 Routes: `/` (home) · `/problems` (catalog) · `/git-problems` (Git problems) · `/play/[id]` (practice) · `/embed` (iframe widget) ·
@@ -65,6 +65,22 @@ The widget posts `tt:ready`, `tt:step:completed`, `tt:problem:completed`, and
 `tt:progress` messages to the host page; the host sends `tt:init` (studentId,
 problemId, or an inline teacher-authored problem JSON) and `tt:reset`. Full guide
 with copy-paste snippets: `/docs/embed`. Protocol types: `src/embed/protocol.ts`.
+
+## Security
+
+- **Headers** (`next.config.js`): CSP (`default-src 'self'`, no `object-src`), `nosniff`,
+  `Referrer-Policy`, `Permissions-Policy`, HSTS. `frame-ancestors 'self'` everywhere
+  (clickjacking protection) **except `/embed`, which stays frameable by any site** —
+  that is the product.
+- **Session cookie**: AES-256-GCM-encrypted payload keyed from `SESSION_SECRET`, httpOnly,
+  with a server-side 10-day expiry enforced on `iat`. The retired HMAC format is rejected,
+  so existing users re-login once after upgrading.
+- **API abuse controls**: same-origin (CSRF) check on every state-changing route, a 256 KiB
+  cap on progress bodies, and per-IP/per-user rate limits on OAuth, progress writes, logout,
+  and account deletion (`src/server/ratelimit.ts`; best-effort per serverless instance).
+- **Embed hardening**: the widget only accepts `tt:` commands from its parent window;
+  hosts can pin origins with `&origin=https://their-site.edu` (also used as the outbound
+  `postMessage` target) and inline problem JSON is size-capped.
 
 ## Roles
 

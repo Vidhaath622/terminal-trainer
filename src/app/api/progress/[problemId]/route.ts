@@ -1,5 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { badRequest, currentUser, serverError, unauthorized } from "@/server/http";
+import {
+  assertSameOrigin,
+  badRequest,
+  currentUser,
+  rateLimited,
+  readJsonBody,
+  serverError,
+  tooLarge,
+  unauthorized,
+} from "@/server/http";
+import { progressPutLimiter } from "@/server/ratelimit";
 import { getProgress, putProgress } from "@/server/db";
 import { putProgressSchema } from "@/lib/progress-schema";
 import { LAUNCH_PROBLEMS } from "@/problems/launch";
@@ -39,15 +49,17 @@ export async function PUT(
   const session = currentUser(req);
   if (!session) return unauthorized();
 
-  const { problemId } = ctx.params;
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest("body must be JSON");
-  }
+  const csrf = assertSameOrigin(req);
+  if (csrf) return csrf;
 
-  const parsed = putProgressSchema.safeParse(body);
+  const limited = rateLimited(progressPutLimiter.check(`user:${session.githubId}`));
+  if (limited) return limited;
+
+  const { problemId } = ctx.params;
+  const body = await readJsonBody(req);
+  if (!body.ok) return body.reason === "too-large" ? tooLarge() : badRequest("body must be JSON");
+
+  const parsed = putProgressSchema.safeParse(body.value);
   if (!parsed.success) {
     return badRequest("invalid progress data: " + parsed.error.issues[0]?.message);
   }

@@ -92,6 +92,59 @@ export function parseHostProblem(data: unknown): { ok: true; problem: Problem } 
   };
 }
 
+/** Cap on host-supplied inline problem JSON (keeps the zod parse bounded). */
+export const MAX_INLINE_PROBLEM_JSON_BYTES = 200_000;
+
+/**
+ * Parse a `?origin=` allowlist (comma-separated origins) into normalized
+ * origin strings. Empty list = no restriction: the widget accepts messages
+ * from whatever site embeds it, as the public docs promise.
+ */
+export function parseAllowedOrigins(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const out: string[] = [];
+  for (const part of raw.split(",")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    try {
+      const url = new URL(trimmed);
+      if (url.protocol === "http:" || url.protocol === "https:") out.push(url.origin);
+    } catch {
+      // ignore junk entries rather than failing the whole list
+    }
+  }
+  return out;
+}
+
+export interface HostMessageContext {
+  /** event.origin of the incoming message */
+  origin: string;
+  /** true when event.source === window.parent */
+  sourceIsParent: boolean;
+  /** allowed parent origins; [] accepts any (public embed) */
+  allowedOrigins: string[];
+}
+
+/**
+ * Should this host command be acted on? Only the embedding page (the parent
+ * window) may drive the widget, and — when the host pinned origins with
+ * `?origin=` — only from one of those origins.
+ */
+export function isAllowedHostMessage(ctx: HostMessageContext): boolean {
+  if (!ctx.sourceIsParent) return false;
+  if (ctx.allowedOrigins.length === 0) return true;
+  return ctx.allowedOrigins.includes(ctx.origin);
+}
+
+/** True when an inline problem payload exceeds the cap (or won't serialize). */
+export function inlineProblemTooLarge(problem: unknown): boolean {
+  try {
+    return JSON.stringify(problem ?? null).length > MAX_INLINE_PROBLEM_JSON_BYTES;
+  } catch {
+    return true; // circular / exotic values: refuse
+  }
+}
+
 /**
  * Host-side helper: create a widget controller around an iframe.
  * Lightweight enough to paste into any college website.

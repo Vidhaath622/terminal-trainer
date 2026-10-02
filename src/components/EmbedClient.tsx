@@ -8,18 +8,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProblemPlayer from "./ProblemPlayer";
 import { LAUNCH_PROBLEMS, getLaunchProblem } from "@/problems/launch";
-import { parseHostProblem, isHostToWidget, type HostToWidgetMessage, type EmbedInitMessage } from "@/embed/protocol";
+import {
+  parseHostProblem,
+  isHostToWidget,
+  isAllowedHostMessage,
+  inlineProblemTooLarge,
+  parseAllowedOrigins,
+  MAX_INLINE_PROBLEM_JSON_BYTES,
+  type HostToWidgetMessage,
+  type EmbedInitMessage,
+} from "@/embed/protocol";
 import type { Problem } from "@/engine/schema";
 import type { SessionEvent } from "@/engine/session";
 import { maxMarks } from "@/engine/grader";
 
-function parseParams(): { problemId?: string; studentId?: string; compact?: boolean } {
-  if (typeof window === "undefined") return {};
+function parseParams(): {
+  problemId?: string;
+  studentId?: string;
+  compact?: boolean;
+  allowedOrigins: string[];
+} {
+  if (typeof window === "undefined") return { allowedOrigins: [] };
   const params = new URLSearchParams(window.location.search);
   return {
     problemId: params.get("problem") ?? undefined,
     studentId: params.get("student") ?? undefined,
     compact: params.get("compact") === "1",
+    // ?origin= pins which parent origins may drive (and receive) this widget.
+    allowedOrigins: parseAllowedOrigins(params.get("origin")),
   };
 }
 
@@ -34,9 +50,10 @@ export default function EmbedClient() {
 
   const emit = useCallback((msg: unknown) => {
     if (typeof window !== "undefined" && window.parent !== window) {
-      window.parent.postMessage(msg, "*");
+      // Targeted origin when the host pinned ?origin=, else "*" (public embed).
+      window.parent.postMessage(msg, params.allowedOrigins[0] ?? "*");
     }
-  }, []);
+  }, [params.allowedOrigins]);
 
   // Handshake: tell the host what we can offer.
   useEffect(() => {
@@ -73,9 +90,18 @@ export default function EmbedClient() {
     [emit, studentId]
   );
 
-  // Listen for host commands.
+  // Listen for host commands (parent window only; origin-pinned when asked).
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
+      if (
+        !isAllowedHostMessage({
+          origin: e.origin,
+          sourceIsParent: e.source === window.parent,
+          allowedOrigins: params.allowedOrigins,
+        })
+      ) {
+        return;
+      }
       if (!isHostToWidget(e.data)) return;
       const msg = e.data as HostToWidgetMessage;
       if (msg.type === "tt:reset") {
@@ -88,6 +114,12 @@ export default function EmbedClient() {
       setStudentId(init.studentId ?? null);
       setError(null);
       if (init.problem !== undefined) {
+        if (inlineProblemTooLarge(init.problem)) {
+          setError(
+            `Inline problem rejected: payload exceeds ${MAX_INLINE_PROBLEM_JSON_BYTES} bytes.`
+          );
+          return;
+        }
         const parsed = parseHostProblem(init.problem);
         if (parsed.ok) setProblem(parsed.problem);
         else setError("Invalid problem JSON: " + parsed.errors.join("; "));
@@ -101,7 +133,7 @@ export default function EmbedClient() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [params]);
 
   const [resetNonce, setResetNonce] = useState(0);
   useEffect(() => {

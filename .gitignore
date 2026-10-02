@@ -9,3 +9,6 @@ coverage/
 .freebuff/
 .vercel
 .env*.local
+.env
+.env.*
+!.env.example

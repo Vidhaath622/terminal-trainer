@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { rateLimited } from "@/server/http";
+import { authCallbackLimiter, clientKey } from "@/server/ratelimit";
 import { exchangeCodeForToken, fetchGithubUser } from "@/server/github";
 import { upsertUser } from "@/server/db";
 import {
@@ -6,6 +8,7 @@ import {
   OAUTH_STATE_COOKIE,
   SESSION_COOKIE,
   sessionCookieOptions,
+  timingSafeStringEqual,
 } from "@/server/session";
 
 /**
@@ -14,6 +17,9 @@ import {
  * the GitHub identity into Postgres, and issues the signed session cookie.
  */
 export async function GET(req: NextRequest) {
+  const limited = rateLimited(authCallbackLimiter.check(clientKey(req)));
+  if (limited) return limited;
+
   const url = req.nextUrl;
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -24,7 +30,7 @@ export async function GET(req: NextRequest) {
   if (!state) return redirectTo(req, "/", "Missing OAuth state");
 
   const cookieState = req.cookies.get(OAUTH_STATE_COOKIE)?.value;
-  if (!cookieState || cookieState !== state) {
+  if (!cookieState || !timingSafeStringEqual(cookieState, state)) {
     return redirectTo(req, "/", "OAuth state mismatch — please try signing in again");
   }
 
