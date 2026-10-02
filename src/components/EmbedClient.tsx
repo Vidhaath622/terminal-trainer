@@ -9,12 +9,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProblemPlayer from "./ProblemPlayer";
 import { LAUNCH_PROBLEMS, getLaunchProblem } from "@/problems/launch";
 import {
-  parseHostProblem,
   isHostToWidget,
   isAllowedHostMessage,
-  inlineProblemTooLarge,
+  hasInlineAuthoringAttempt,
   parseAllowedOrigins,
-  MAX_INLINE_PROBLEM_JSON_BYTES,
   type HostToWidgetMessage,
   type EmbedInitMessage,
 } from "@/embed/protocol";
@@ -113,16 +111,12 @@ export default function EmbedClient() {
       startedRef.current = true;
       setStudentId(init.studentId ?? null);
       setError(null);
-      if (init.problem !== undefined) {
-        if (inlineProblemTooLarge(init.problem)) {
-          setError(
-            `Inline problem rejected: payload exceeds ${MAX_INLINE_PROBLEM_JSON_BYTES} bytes.`
-          );
-          return;
-        }
-        const parsed = parseHostProblem(init.problem);
-        if (parsed.ok) setProblem(parsed.problem);
-        else setError("Invalid problem JSON: " + parsed.errors.join("; "));
+      // Remote authoring is impossible: a host that sends inline problem JSON
+      // is rejected outright (runtime check — untyped hosts can't bypass it).
+      if (hasInlineAuthoringAttempt(e.data)) {
+        setError(
+          "Inline problem content is no longer accepted — use problemId from tt:ready or ?problem=..."
+        );
         return;
       }
       if (init.problemId) {

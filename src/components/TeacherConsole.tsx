@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * TeacherConsole: role-gated authoring surface.
- * Teachers/admins: publish problems (JSON) and quizzes (form or JSON).
- * Students: see the catalog + take quizzes; all mutations are denied client-side.
- * Backed by ContentStore (same permission rules a server would enforce).
+ * TeacherConsole: role-gated authoring surface — a LOCAL DEMO.
+ * The "acting as" switcher only changes in-memory state: nothing published
+ * here is sent to the server (there is no authoring endpoint; the API is
+ * deny-by-default). The authoritative role is the one the server computes
+ * for your session (env allowlists) and shows in the banner below.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ContentStore } from "@/roles/client-store";
 import { capabilitiesOf, type Role, type User } from "@/roles/types";
+import { fetchMe, type GithubUser } from "@/lib/sync";
 import { LAUNCH_PROBLEMS } from "@/problems/launch";
 import QuizRunner from "./QuizRunner";
 import type { Quiz } from "@/roles/quiz";
@@ -30,6 +32,17 @@ export default function TeacherConsole() {
   const [json, setJson] = useState(SAMPLE_PROBLEM_JSON);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<Quiz>(DEMO_QUIZ);
+  // Authoritative, server-computed role for the signed-in account (or null).
+  const [account, setAccount] = useState<GithubUser | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchMe().then((u) => {
+      if (alive) setAccount(u);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const caps = capabilitiesOf(role);
   const canPublish = caps.includes("problem:create");
@@ -49,7 +62,9 @@ export default function TeacherConsole() {
     <div className="space-y-4">
       {/* role switcher */}
       <div className="flex flex-wrap items-center gap-2 rounded border border-term-border bg-term-panel p-3">
-        <span className="font-mono text-xs uppercase text-term-text/50">Acting as</span>
+        <span className="font-mono text-xs uppercase text-term-text/50">
+          Demo · acting as
+        </span>
         {ROLE_TABS.map((r) => (
           <button
             key={r}
@@ -62,7 +77,12 @@ export default function TeacherConsole() {
             {r}
           </button>
         ))}
-        <span className="ml-auto text-[10px] text-term-text/50">
+        <span className="ml-auto text-[10px] text-term-text/50" data-testid="server-role">
+          your account:{" "}
+          {account ? `${account.login} → ${account.role}` : "not signed in"} ·
+          server-authoritative (this demo never leaves your browser)
+        </span>
+        <span className="text-[10px] text-term-text/50">
           caps: {caps.join(", ") || "none"}
         </span>
       </div>

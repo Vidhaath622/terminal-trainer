@@ -3,24 +3,22 @@
  * Pure TypeScript - usable on both sides of the iframe boundary.
  *
  * Host -> widget:
- *   { type: "tt:init",  studentId?, problem?|problemId?, config? }
+ *   { type: "tt:init",  studentId?, problemId?, config? }
  *   { type: "tt:reset" }
+ *   (inline host-authored `problem` JSON was removed: remote pages must not
+ *    author content through the widget — use a built-in problemId)
  * Widget -> host:
  *   { type: "tt:ready",            problems: [{id,title,difficulty}] }
  *   { type: "tt:step:completed",   problemId, stepId, earned, max, durationMs }
  *   { type: "tt:problem:completed",problemId, earned, max, durationMs }
  *   { type: "tt:progress",         problemId, currentStepIndex, earned, max }
  */
-import { problemSchema, type Problem } from "@/engine/schema";
-
 export const EMBED_PREFIX = "tt:";
 
 export interface EmbedInitMessage {
   type: "tt:init";
   /** host's own student identifier; echoed back in events */
   studentId?: string;
-  /** inline custom problem (teacher-authored JSON) */
-  problem?: unknown;
   /** pick from the built-in launch set */
   problemId?: string;
   config?: {
@@ -82,18 +80,16 @@ export function isHostToWidget(data: unknown): data is HostToWidgetMessage {
   return t === "tt:init" || t === "tt:reset";
 }
 
-/** Validate an inline custom problem from the host. Returns the parsed Problem or an error list. */
-export function parseHostProblem(data: unknown): { ok: true; problem: Problem } | { ok: false; errors: string[] } {
-  const result = problemSchema.safeParse(data);
-  if (result.success) return { ok: true, problem: result.data };
-  return {
-    ok: false,
-    errors: result.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`),
-  };
+/**
+ * Inline host-authored problems were removed: a remote page must not be able
+ * to author content through the widget. True when a host message still
+ * carries a `problem` payload — checked at runtime so an untyped JS host
+ * cannot slip one past the TypeScript types.
+ */
+export function hasInlineAuthoringAttempt(msg: unknown): boolean {
+  if (typeof msg !== "object" || msg === null) return false;
+  return (msg as Record<string, unknown>).problem !== undefined;
 }
-
-/** Cap on host-supplied inline problem JSON (keeps the zod parse bounded). */
-export const MAX_INLINE_PROBLEM_JSON_BYTES = 200_000;
 
 /**
  * Parse a `?origin=` allowlist (comma-separated origins) into normalized
@@ -134,15 +130,6 @@ export function isAllowedHostMessage(ctx: HostMessageContext): boolean {
   if (!ctx.sourceIsParent) return false;
   if (ctx.allowedOrigins.length === 0) return true;
   return ctx.allowedOrigins.includes(ctx.origin);
-}
-
-/** True when an inline problem payload exceeds the cap (or won't serialize). */
-export function inlineProblemTooLarge(problem: unknown): boolean {
-  try {
-    return JSON.stringify(problem ?? null).length > MAX_INLINE_PROBLEM_JSON_BYTES;
-  } catch {
-    return true; // circular / exotic values: refuse
-  }
 }
 
 /**

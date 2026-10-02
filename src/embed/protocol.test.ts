@@ -1,12 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   isHostToWidget,
-  parseHostProblem,
   connectWidget,
   isAllowedHostMessage,
   parseAllowedOrigins,
-  inlineProblemTooLarge,
-  MAX_INLINE_PROBLEM_JSON_BYTES,
+  hasInlineAuthoringAttempt,
   type WidgetToHostMessage,
 } from "./protocol";
 
@@ -26,23 +24,18 @@ describe("isHostToWidget", () => {
   });
 });
 
-describe("parseHostProblem", () => {
-  it("accepts a valid teacher-authored problem", () => {
-    const result = parseHostProblem({
-      id: "custom-1",
-      title: "Custom",
-      difficulty: "easy",
-      brief: "Do it.",
-      steps: [{ id: "s1", prompt: "P", marks: 2, checks: [{ type: "fileExists", path: "/f", marks: 2 }] }],
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.problem.id).toBe("custom-1");
+describe("hasInlineAuthoringAttempt", () => {
+  it("flags any host message carrying an inline problem payload", () => {
+    expect(hasInlineAuthoringAttempt({ type: "tt:init", problem: { id: "x" } })).toBe(true);
+    expect(hasInlineAuthoringAttempt({ type: "tt:init", problem: null })).toBe(true);
+    expect(hasInlineAuthoringAttempt({ type: "tt:init", problem: undefined })).toBe(false);
   });
 
-  it("rejects invalid problems with readable errors", () => {
-    const result = parseHostProblem({ id: "bad" });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors.length).toBeGreaterThan(0);
+  it("passes clean init messages and non-objects through", () => {
+    expect(hasInlineAuthoringAttempt({ type: "tt:init", problemId: "grep-search" })).toBe(false);
+    expect(hasInlineAuthoringAttempt({ type: "tt:reset" })).toBe(false);
+    expect(hasInlineAuthoringAttempt(null)).toBe(false);
+    expect(hasInlineAuthoringAttempt("tt:init")).toBe(false);
   });
 });
 
@@ -92,25 +85,6 @@ describe("isAllowedHostMessage", () => {
     expect(
       isAllowedHostMessage({ origin: "https://evil.example", sourceIsParent: true, allowedOrigins })
     ).toBe(false);
-  });
-});
-
-describe("inlineProblemTooLarge", () => {
-  it("accepts normal problem payloads", () => {
-    expect(inlineProblemTooLarge({ id: "x", title: "small" })).toBe(false);
-    expect(inlineProblemTooLarge(null)).toBe(false);
-    expect(inlineProblemTooLarge(undefined)).toBe(false);
-  });
-
-  it("rejects payloads over the byte cap", () => {
-    const big = { blob: "x".repeat(MAX_INLINE_PROBLEM_JSON_BYTES) };
-    expect(inlineProblemTooLarge(big)).toBe(true);
-  });
-
-  it("rejects values that cannot be serialized", () => {
-    const circular: Record<string, unknown> = {};
-    circular.self = circular;
-    expect(inlineProblemTooLarge(circular)).toBe(true);
   });
 });
 

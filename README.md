@@ -27,6 +27,7 @@ npm run build      # production build
 | Session | `src/engine/session.ts` | Auto-grading, events, reset, persistence |
 | Launch problems | `src/problems/launch.ts` | 30 problems incl. a 10-problem Git track, each with a tested solution |
 | Roles | `src/roles/` | Teacher/student/admin capabilities, quizzes, submissions |
+| API gate | `src/middleware.ts`, `src/server/api-allowlist.ts` | Deny-by-default `/api/*` allowlist + server-side roles (`src/server/authz.ts`) |
 | Embed API | `src/embed/protocol.ts` | postMessage types + host helper |
 | UI | `src/components/`, `src/app/` | xterm terminal, player, teacher console, docs |
 | GitHub auth + sync | `src/server/`, `src/lib/sync.ts` | OAuth, Neon Postgres, encrypted session cookies |
@@ -63,8 +64,9 @@ does not render sign-in chrome.
 
 The widget posts `tt:ready`, `tt:step:completed`, `tt:problem:completed`, and
 `tt:progress` messages to the host page; the host sends `tt:init` (studentId,
-problemId, or an inline teacher-authored problem JSON) and `tt:reset`. Full guide
-with copy-paste snippets: `/docs/embed`. Protocol types: `src/embed/protocol.ts`.
+problemId from the `tt:ready` list — inline host-authored problem JSON is
+rejected) and `tt:reset`. Full guide with copy-paste snippets: `/docs/embed`.
+Protocol types: `src/embed/protocol.ts`.
 
 ## Security
 
@@ -78,9 +80,18 @@ with copy-paste snippets: `/docs/embed`. Protocol types: `src/embed/protocol.ts`
 - **API abuse controls**: same-origin (CSRF) check on every state-changing route, a 256 KiB
   cap on progress bodies, and per-IP/per-user rate limits on OAuth, progress writes, logout,
   and account deletion (`src/server/ratelimit.ts`; best-effort per serverless instance).
+- **No remote authoring (deny-by-default API)**: `/api/*` middleware 404s/405s anything
+  outside the explicit allowlist (`src/server/api-allowlist.ts` — progress sync, `/api/me`,
+  OAuth, logout, account deletion). `src/server/route-surface.test.ts` fails CI if a route file
+  and the allowlist ever disagree, so an authoring endpoint cannot appear by accident.
+- **Server-authoritative roles**: role is computed server-side from deploy-time env allowlists
+  (`ADMIN_GITHUB_IDS`/`ADMIN_LOGINS`/`TEACHER_GITHUB_IDS`/`TEACHER_LOGINS` →
+  `src/server/authz.ts`, reported on `/api/me`) and defaults to `student` (zero authoring caps).
+  Capability checks take session identity only — a client-asserted role can never reach one.
 - **Embed hardening**: the widget only accepts `tt:` commands from its parent window;
   hosts can pin origins with `&origin=https://their-site.edu` (also used as the outbound
-  `postMessage` target) and inline problem JSON is size-capped.
+  `postMessage` target), and **inline host-authored problem JSON is rejected** — remote
+  pages choose built-in `problemId`s only.
 
 ## Roles
 
@@ -88,8 +99,10 @@ with copy-paste snippets: `/docs/embed`. Protocol types: `src/embed/protocol.ts`
 - **Students** view and answer content; see only their own progress; cannot publish.
 - **Admins** manage users and inherit everything.
 
-Enforced by typed capability guards (`src/roles/types.ts`) used by the content store —
-the same rules a server backend would enforce.
+Enforced by typed capability guards (`src/roles/types.ts`) used by the content store, and
+server-side by `src/server/authz.ts` (env allowlists, session-shaped input only). Role truth
+is always server-computed (`/api/me`); the `/teacher` console's "acting as" switcher is an
+explicitly local demo — there is no authoring API anywhere.
 
 ## Testing
 

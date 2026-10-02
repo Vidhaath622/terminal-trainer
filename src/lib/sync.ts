@@ -8,6 +8,7 @@
 import { storageKey } from "@/engine/session";
 import type { SessionProgress } from "@/engine/session";
 import { parseProgress, mergeProgress, type ProgressData } from "./progress-schema";
+import type { Role } from "@/roles/types";
 
 export interface GithubUser {
   githubId: number;
@@ -15,6 +16,8 @@ export interface GithubUser {
   name: string | null;
   avatarUrl: string | null;
   createdAt: string | null;
+  /** Server-computed role (env allowlists); never trust a client-asserted one. */
+  role: Role;
 }
 
 /** Fetch the signed-in user (or null) from /api/me. */

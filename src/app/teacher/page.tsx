@@ -4,7 +4,7 @@ import TeacherConsole from "@/components/TeacherConsole";
 export const metadata = {
   title: "Terminal Trainer: teacher console",
   description:
-    "Switch roles to see the capability checks live: teachers author and publish; students only view and answer.",
+    "Local demo of role capability checks: teachers author and publish; students only view and answer.",
 };
 
 export default function TeacherPage() {
@@ -15,10 +15,12 @@ export default function TeacherPage() {
         <header className="mb-8">
           <h1 className="font-mono text-2xl font-bold">Teacher console</h1>
           <p className="prose-body mt-2 text-sm text-term-muted">
-            Switch roles to see the permission walls live: teachers author and
-            publish; students only view and answer. Every mutation is checked
-            against role capabilities in the content store — try publishing as
-            a student.
+            A local demo of the permission walls: switch roles to see teachers
+            author and publish while students only view and answer — every
+            mutation is checked against role capabilities in the content store.
+            Nothing published here is sent anywhere (there is no authoring API);
+            your <em>server-computed</em> account role is shown above and comes
+            from deploy-time allowlists.
           </p>
         </header>
         <TeacherConsole />

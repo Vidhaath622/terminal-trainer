@@ -53,9 +53,10 @@ export default function EmbedDocsPage() {
           </p>
           <CodeBlock>{CONTROL_SNIPPET}</CodeBlock>
           <p className="prose-body mt-2 text-term-text/70">
-            <code>tt:init</code> accepts <code>studentId</code>, <code>problemId</code>, or a full
-            inline <code>problem</code> JSON (teacher-authored, same schema as the upload console —
-            invalid problems are rejected with a readable error).
+            <code>tt:init</code> accepts <code>studentId</code> and <code>problemId</code> (pick
+            one from the <code>tt:ready</code> list or <code>?problem=</code>). Inline host-authored
+            <code> problem</code> JSON is <strong>not accepted</strong>: the widget rejects it
+            outright, so a remote page cannot author content through the embed.
           </p>
         </section>
 
@@ -78,6 +79,11 @@ export default function EmbedDocsPage() {
             <code> content:view</code>, <code>content:answer</code>, and
             <code> progress:viewOwn</code>. Every mutation path checks these with typed guards
             (see <code>src/roles/</code>), and the teacher console demonstrates the walls live.
+            The live app computes your role <em>server-side</em> from deploy-time allowlists
+            (<code>src/server/authz.ts</code>, exposed on <code>/api/me</code>) — there is no API
+            for authoring content at all: <code>/api/*</code> is deny-by-default
+            (<code>src/server/api-allowlist.ts</code>), and the console&apos;s role switcher is a
+            local demo that never leaves your browser.
           </p>
         </section>
       </main>
@@ -116,7 +122,8 @@ const HOST_SNIPPET = `window.addEventListener("message", (event) => {
 
 const CONTROL_SNIPPET = `const frame = document.getElementById("tt-widget");
 
-// Assign the problem for this student (or send a teacher-authored problem JSON)
+// Assign a built-in problem to this student
+// (inline host-authored problem JSON is rejected by the widget)
 frame.contentWindow.postMessage(
   { type: "tt:init", studentId: "roll-42", problemId: "chmod-permissions" },
   "*"
