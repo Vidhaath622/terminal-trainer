@@ -181,7 +181,8 @@ describe("git status / add / commit / log", () => {
     expect(sh.run("git help commit").stdout).toContain("record staged changes");
     expect(sh.run("git commit -h").stdout).toContain("USAGE");
     expect(sh.run("git help bogus").error).toContain("no help");
-    expect(sh.run("git push").error).toContain("is not a git command");
+    expect(sh.run("git pushx").error).toContain("is not a git command");
+    expect(sh.run("git push").error).toContain("usage: git push");
   });
 });
 
@@ -352,7 +353,7 @@ describe("git branch / switch / merge", () => {
     const verbose = sh.run("git branch -v").stdout;
     expect(verbose).toMatch(/\* main\s+\w{7} Start/);
     expect(verbose).toContain("feature");
-    // -a has nothing extra to show: the simulator has no remotes
+    // -a has nothing extra to show: this repository has no remotes
     expect(sh.run("git branch -a").stdout).toBe(out);
   });
 
@@ -555,5 +556,399 @@ describe("git branch / switch / merge", () => {
     const parent = sh.run("git show --stat HEAD~1").stdout;
     expect(parent).toContain("Start"); // first parent is main's tip...
     expect(parent).not.toContain("Feature work"); // ...not the merged branch
+  });
+});
+
+/** One-commit repo at /home/student/proj on main, README.md = "version 1\n". */
+function bootRepo() {
+  _resetClock();
+  const sh = makeShell({ dirs: ["/home/student/proj"], home: "/home/student" } as never);
+  sh.run(`git config --global user.name "Ada Lovelace"`);
+  sh.run("git config --global user.email ada@example.com");
+  sh.run("git config --global init.defaultBranch main");
+  sh.run("cd proj");
+  sh.run("git init");
+  sh.run(`echo "version 1" > README.md`);
+  sh.run("git add README.md");
+  sh.run(`git commit -m "Start"`);
+  return sh;
+}
+
+/** bootRepo plus a second commit: README.md = "version 2\n", message "Second". */
+function bootRepo2() {
+  const sh = bootRepo();
+  sh.run(`echo "version 2" > README.md`);
+  sh.run("git add README.md");
+  sh.run(`git commit -m "Second"`);
+  return sh;
+}
+
+describe("git restore", () => {
+  it("discards worktree edits and rejects unknown paths", () => {
+    const sh = bootRepo();
+    sh.run(`echo "oops" > README.md`);
+    expect(sh.run("git restore README.md").error).toBeNull();
+    expect(sh.run("cat README.md").stdout).toBe("version 1\n");
+    expect(sh.run("git status").stdout).toContain("working tree clean");
+    expect(sh.run("git restore nope.txt").error).toContain("did not match");
+    expect(sh.run("git restore").error).toContain("usage");
+  });
+
+  it("--staged unstages while keeping the edit on disk", () => {
+    const sh = bootRepo();
+    sh.run(`echo "version 2" > README.md`);
+    sh.run("git add README.md");
+    expect(sh.run("git restore --staged README.md").error).toBeNull();
+    expect(sh.run("git diff --staged").stdout).toBe("");
+    expect(sh.run("cat README.md").stdout).toBe("version 2\n");
+    const status = sh.run("git status").stdout;
+    expect(status).toContain("modified:   README.md");
+    expect(status).not.toContain("Changes to be committed"); // truly unstaged now
+  });
+
+  it("--staged drops a newly added file from the index only", () => {
+    const sh = bootRepo();
+    sh.run(`touch notes.txt`);
+    sh.run("git add notes.txt");
+    expect(sh.run("git restore --staged notes.txt").error).toBeNull();
+    expect(sh.run("git status").stdout).toContain("Untracked files:");
+    expect(sh.run("git status").stdout).not.toContain("new file:   notes.txt");
+    expect(sh.run("ls").stdout).toContain("notes.txt");
+  });
+});
+
+describe("git reset", () => {
+  it("--soft moves the branch back and keeps the undone work staged", () => {
+    const sh = bootRepo2();
+    expect(sh.run("git reset --soft HEAD~1").error).toBeNull();
+    expect(sh.run("git log --oneline").stdout).not.toContain("Second");
+    expect(sh.run("git log --oneline").stdout).toContain("Start");
+    const staged = sh.run("git diff --staged").stdout;
+    expect(staged).toContain("+version 2");
+    expect(sh.run("cat README.md").stdout).toBe("version 2\n"); // tree untouched
+  });
+
+  it("--hard moves the branch and rewrites the working tree", () => {
+    const sh = bootRepo2();
+    expect(sh.run("git reset --hard HEAD~1").error).toBeNull();
+    expect(sh.run("cat README.md").stdout).toBe("version 1\n");
+    expect(sh.run("git log --oneline").stdout).not.toContain("Second");
+    expect(sh.run("git status").stdout).toContain("working tree clean");
+  });
+
+  it("refuses unknown revisions and options", () => {
+    const sh = bootRepo2();
+    expect(sh.run("git reset nope").error).toContain("unknown revision");
+    expect(sh.run("git reset --nope").error).toContain("invalid option");
+  });
+});
+
+describe("git stash", () => {
+  it("saves dirty work, cleans the tree, and pops it back", () => {
+    const sh = bootRepo();
+    sh.run(`echo "wip line" >> README.md`);
+    const saved = sh.run("git stash");
+    expect(saved.error).toBeNull();
+    expect(saved.stdout).toContain("Saved working directory");
+    expect(sh.run("cat README.md").stdout).toBe("version 1\n");
+    expect(sh.run("git status").stdout).toContain("working tree clean");
+    expect(sh.run("git stash list").stdout).toContain("stash@{0}: WIP on main: Start");
+
+    expect(sh.run("git stash pop").error).toBeNull();
+    expect(sh.run("cat README.md").stdout).toContain("wip line");
+    expect(sh.run("git stash list").stdout).toBe("");
+    expect(sh.run("git status").stdout).not.toContain("working tree clean");
+  });
+
+  it("nothing to save on a clean tree; pop refuses when dirty again", () => {
+    const sh = bootRepo();
+    expect(sh.run("git stash").stdout).toContain("No local changes to save");
+    expect(sh.run("git stash pop").error).toContain("No stash entries");
+    sh.run(`echo "wip" >> README.md`);
+    sh.run("git stash");
+    sh.run(`echo "second thoughts" >> README.md`);
+    expect(sh.run("git stash pop").error).toContain("would be overwritten");
+  });
+
+  it("stashes a deletion and restores it on pop", () => {
+    const sh = bootRepo();
+    sh.run("rm README.md");
+    expect(sh.run("git stash").error).toBeNull();
+    expect(sh.run("ls").stdout).toContain("README.md"); // tree cleaned back to HEAD
+    expect(sh.run("git status").stdout).toContain("working tree clean");
+    expect(sh.run("git stash pop").error).toBeNull();
+    expect(sh.run("ls").stdout).not.toContain("README.md"); // the deletion comes back
+    expect(sh.run("git stash list").stdout).toBe("");
+  });
+
+  it("rejects actions the simulator does not implement", () => {
+    const sh = bootRepo();
+    expect(sh.run("git stash drop").error).toContain("not simulated");
+  });
+});
+
+describe("git tag and named refs", () => {
+  it("creates, lists and rejects duplicate tags; tags and branches resolve", () => {
+    const sh = bootRepo2();
+    expect(sh.run("git tag").stdout).toBe("");
+    expect(sh.run("git tag v1.0 HEAD~1").error).toBeNull();
+    expect(sh.run("git tag").stdout).toBe("v1.0\n");
+    expect(sh.run("git tag v1.0").error).toContain("already exists");
+
+    // tags and branch names work anywhere a commit is expected
+    expect(sh.run("git show v1.0").stdout).toContain("Start");
+    expect(sh.run("git log --oneline v1.0").stdout).not.toContain("Second");
+    expect(sh.run("git show main").stdout).toContain("Second");
+    expect(sh.run("git show v9.9").error).toContain("unknown revision");
+  });
+});
+
+describe("git log filters and refs", () => {
+  it("--grep and --author narrow the walk", () => {
+    const sh = bootRepo();
+    sh.run(`git config --global user.name "Grace Hopper"`);
+    sh.run(`echo "version 2" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Add widget support"`);
+
+    const grepOut = sh.run("git log --oneline --grep widget").stdout;
+    expect(grepOut).toContain("Add widget support");
+    expect(grepOut).not.toContain("Start");
+
+    const hers = sh.run("git log --oneline --author Grace").stdout;
+    expect(hers).toContain("Add widget support");
+    expect(hers).not.toContain("Start");
+
+    expect(sh.run("git log --grep missing").stdout).not.toContain("Start");
+    expect(sh.run("git log --grep").error).toContain("requires a value");
+  });
+
+  it("--since and --until bound the walk by day", () => {
+    const sh = bootRepo(); // commits carry the real clock — bracket it widely
+    expect(sh.run("git log --oneline --since 2020-01-01").stdout).toContain("Start");
+    expect(sh.run("git log --oneline --since 2030-01-01").stdout.trim()).toBe("");
+    expect(sh.run("git log --oneline --until 2020-01-01").stdout.trim()).toBe("");
+    expect(sh.run("git log --since someday").error).toContain("invalid date");
+  });
+
+  it("walks from a named starting ref", () => {
+    const sh = bootRepo();
+    sh.run("git switch -c feature");
+    sh.run(`echo "feature work" >> README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Feature work"`);
+    sh.run("git switch main");
+
+    const featureLog = sh.run("git log --oneline feature").stdout;
+    expect(featureLog).toContain("Feature work");
+    expect(featureLog).toContain("Start");
+    expect(sh.run("git log --oneline").stdout).not.toContain("Feature work");
+    expect(sh.run("git log --oneline ghost").error).toContain("unknown revision");
+  });
+});
+
+describe("git diff name-only, pathspec and branch refs", () => {
+  it("--name-only lists paths; -- limits the diff", () => {
+    _resetClock();
+    const sh = makeShell({ dirs: ["/home/student/proj"], home: "/home/student" } as never);
+    sh.run(`git config --global user.name "Ada Lovelace"`);
+    sh.run("git config --global user.email ada@example.com");
+    sh.run("git config --global init.defaultBranch main");
+    sh.run("cd proj");
+    sh.run("git init");
+    sh.run(`echo "one" > a.txt`);
+    sh.run(`echo "two" > b.txt`);
+    sh.run("git add .");
+    sh.run(`git commit -m "Start"`);
+
+    sh.run(`echo "one changed" > a.txt`);
+    sh.run(`echo "two changed" > b.txt`);
+    expect(sh.run("git diff --name-only").stdout).toBe("a.txt\nb.txt\n");
+
+    const onlyB = sh.run("git diff -- b.txt").stdout;
+    expect(onlyB).toContain("b.txt");
+    expect(onlyB).not.toContain("a.txt");
+    expect(sh.run("git diff a.txt").stdout).not.toContain("b.txt");
+  });
+
+  it("diffs two branches by name, in both directions", () => {
+    const sh = bootRepo();
+    sh.run("git switch -c feature");
+    sh.run(`echo "feature work" >> README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Feature work"`);
+    sh.run("git switch main");
+
+    expect(sh.run("git diff main feature").stdout).toContain("+feature work");
+    expect(sh.run("git diff feature main").stdout).toContain("-feature work");
+  });
+});
+
+
+describe("git remotes", () => {
+  /** bootRepo plus a server copy at /home/student/app.git, one commit ahead of it. */
+  function bootRemote() {
+    const sh = bootRepo();
+    sh.run("cp .git /home/student/app.git");
+    sh.run("git remote add origin /home/student/app.git");
+    sh.run(`echo "version 2" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Second"`);
+    return sh;
+  }
+
+  it("remote add registers a server, and validates names and paths", () => {
+    const sh = bootRepo();
+    expect(sh.run("git remote").stdout).toBe("");
+    expect(sh.run("git remote add origin /home/student/app.git").error).toContain(
+      "does not appear to be a git repository"
+    );
+    expect(sh.run("git remote add bad@name /home/student/app.git").error).toContain("invalid remote name");
+    expect(sh.run("git remote add").error).toContain("usage: git remote");
+    expect(sh.run("git remote show").error).toContain("usage: git remote");
+
+    sh.run("cp .git /home/student/app.git");
+    expect(sh.run("git remote add origin /home/student/app.git").error).toBeNull();
+    const listed = sh.run("git remote").stdout;
+    expect(listed).toContain("origin\t/home/student/app.git (fetch)");
+    expect(listed).toContain("origin\t/home/student/app.git (push)");
+    expect(sh.run("git remote add origin /home/student/app.git").error).toContain("already exists");
+    expect(sh.run("git help push").stdout).toContain("upload your commits");
+  });
+
+  it("push -u uploads commits and records the remote-tracking ref", () => {
+    const sh = bootRemote();
+    const first = sh.run("git push -u origin main");
+    expect(first.error).toBeNull();
+    expect(first.stdout).toContain("To /home/student/app.git");
+    expect(first.stdout).toContain("main -> main");
+    // the serialized server file really received the commit
+    expect(sh.run("cat /home/student/app.git").stdout).toContain("Second");
+    // origin/main resolves anywhere a commit is accepted
+    expect(sh.run("git log origin/main").stdout).toContain("Second");
+    expect(sh.run("git log origin/main").stdout).toContain("Start");
+    // -a lists the tracking ref, plain branch does not
+    expect(sh.run("git branch -a").stdout).toContain("origin/main");
+    expect(sh.run("git branch").stdout).not.toContain("origin/main");
+    // pushing again has nothing new to send
+    expect(sh.run("git push -u origin main").stdout).toContain("Everything up-to-date");
+    // guards
+    expect(sh.run("git push").error).toContain("usage: git push");
+    expect(sh.run("git push origin").error).toContain("usage: git push");
+    expect(sh.run("git push nosuch main").error).toContain("does not appear to be a git repository");
+    expect(sh.run("git push origin nope").error).toContain("does not match any source");
+  });
+
+  it("a new branch arrives on the server as a new branch", () => {
+    const sh = bootRemote();
+    sh.run("git branch feature");
+    const push = sh.run("git push origin feature");
+    expect(push.stdout).toContain("[new branch]");
+    expect(sh.run("cat /home/student/app.git").stdout).toContain("feature");
+    expect(sh.run("git branch -a").stdout).toContain("origin/feature");
+  });
+
+  it("clone round-trips history and wires origin back to the source", () => {
+    const sh = bootRemote();
+    sh.run("git push origin main");
+    expect(sh.run("git clone").error).toContain("usage: git clone");
+    expect(sh.run("git clone /home/student/missing.git").error).toContain("does not exist");
+
+    const c = sh.run("git clone /home/student/app.git /home/student/copy");
+    expect(c.stdout).toContain("Cloning into '/home/student/copy'");
+
+    sh.run("cd /home/student/copy");
+    expect(sh.run("git status").stdout).toContain("On branch main");
+    expect(sh.run("git status").stdout).toContain("working tree clean");
+    expect(sh.run("cat README.md").stdout).toBe("version 2\n");
+    expect(sh.run("git log --oneline").stdout).toContain("Second");
+    expect(sh.run("git remote").stdout).toContain("/home/student/app.git");
+    expect(sh.run("git log origin/main").stdout).toContain("Second");
+
+    sh.run(`echo "version 3" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Third"`);
+    expect(sh.run("git push origin main").stdout).toContain("To /home/student/app.git");
+
+    // the original copy sees the new commit after a fetch
+    sh.run("cd /home/student/proj");
+    expect(sh.run("git fetch").stdout).toContain("From /home/student/app.git");
+    expect(sh.run("git log origin/main").stdout).toContain("Third");
+    expect(sh.run("git log").stdout).not.toContain("Third");
+
+    // cloning onto an existing path is refused
+    expect(sh.run("git clone /home/student/app.git /home/student/copy").error).toContain("already exists");
+  });
+
+  it("pull fast-forwards the current branch, then reports up to date", () => {
+    const sh = bootRemote();
+    sh.run("git push -u origin main");
+    // publish a commit from a second clone
+    sh.run("git clone /home/student/app.git /home/student/other");
+    sh.run("cd /home/student/other");
+    sh.run(`echo "version 3" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Third"`);
+    sh.run("git push origin main");
+    sh.run("cd /home/student/proj");
+
+    const pull = sh.run("git pull");
+    expect(pull.stdout).toContain("Updating");
+    expect(pull.stdout).toContain("Fast-forward");
+    expect(sh.run("cat README.md").stdout).toBe("version 3\n");
+    expect(sh.run("git log --oneline").stdout).toContain("Third");
+    expect(sh.run("git pull").stdout).toContain("Already up to date.");
+
+    // without an upstream, pull explains itself
+    const plain = bootRepo();
+    expect(plain.run("git pull").error).toContain("no tracking information");
+  });
+
+  it("rejects a non-fast-forward push and a diverged pull", () => {
+    const sh = bootRemote();
+    sh.run("git push -u origin main");
+    sh.run("git clone /home/student/app.git /home/student/other");
+    sh.run("cd /home/student/other");
+    sh.run(`echo "theirs" > theirs.txt`);
+    sh.run("git add theirs.txt");
+    sh.run(`git commit -m "Their work"`);
+    sh.run("git push origin main");
+    sh.run("cd /home/student/proj");
+    sh.run(`echo "ours" > ours.txt`);
+    sh.run("git add ours.txt");
+    sh.run(`git commit -m "Our work"`);
+
+    const push = sh.run("git push origin main");
+    expect(push.error).toContain("non-fast-forward");
+    expect(push.code).toBe(1);
+
+    // fetch brings their commits without moving our branch
+    expect(sh.run("git fetch").stdout).toContain("From /home/student/app.git");
+    expect(sh.run("git fetch a b").error).toContain("usage: git fetch");
+    expect(sh.run("git fetch nosuch").error).toContain("does not appear to be a git repository");
+    expect(sh.run("git log origin/main").stdout).toContain("Their work");
+    expect(sh.run("git log").stdout).toContain("Our work");
+    expect(sh.run("git log").stdout).not.toContain("Their work");
+
+    // pull refuses to fast-forward diverged histories
+    expect(sh.run("git pull").error).toContain("Not possible to fast-forward");
+  });
+
+  it("pull refuses when local edits would be overwritten", () => {
+    const sh = bootRemote();
+    sh.run("git push -u origin main");
+    sh.run("git clone /home/student/app.git /home/student/other");
+    sh.run("cd /home/student/other");
+    sh.run(`echo "theirs" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Their work"`);
+    sh.run("git push origin main");
+    sh.run("cd /home/student/proj");
+    sh.run(`echo "wip" >> README.md`);
+
+    expect(sh.run("git pull").error).toContain("would be overwritten by pull");
+    // stash is the way out: shelve, pull, done
+    expect(sh.run("git stash").error).toBeNull();
+    expect(sh.run("git pull").stdout).toContain("Fast-forward");
   });
 });

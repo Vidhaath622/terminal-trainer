@@ -6,8 +6,10 @@
  * beginner meets next (history flags, diffs, untracking, renames), extended
  * with local branches: `branch`, `switch` (and the older `checkout` spelling)
  * and `merge` — fast-forwards, merge commits, and simulated conflicts with
- * `--continue` / `--abort`. No remotes, so `git branch -a` only ever lists
- * local branches. Repository state lives in a `.git` file at
+ * `--continue` / `--abort`. Remotes are other repository files on this disk:
+ * `remote add`, `push`, `fetch`, `pull` and `clone` really move commits
+ * between them, and `git branch -a` also lists remote-tracking refs.
+ * Repository state lives in a `.git` file at
  * the repository root (JSON-serialized), so it flows through the existing
  * VFS (and therefore session persistence) for free. Global config lives in
  * ~/.gitconfig, shared across repositories like the real thing.
@@ -50,6 +52,16 @@ interface MergeState {
   conflicted: string[];
 }
 
+/** A saved working-tree snapshot (real git's stash). */
+interface StashEntry {
+  branch: string;
+  /** the branch head's message at save time, shown by `git stash list` */
+  message: string;
+  time: number;
+  /** tracked paths that differed from HEAD; null = file was deleted */
+  files: Record<string, string | null>;
+}
+
 interface GitMeta {
   version: number;
   branch: string;
@@ -65,6 +77,14 @@ interface GitMeta {
   stagedDeletions?: string[];
   tracked: string[];
   local: Record<string, string>;
+  /** lightweight tags: name -> commit id (absent on older repos). */
+  tags?: Record<string, string>;
+  /** saved working trees; stash@{0} is the newest entry. */
+  stash?: StashEntry[];
+  /** remote name -> absolute path of its serialized repository file */
+  remotes?: Record<string, string>;
+  /** remote-tracking refs: "origin/main" -> commit id */
+  tracking?: Record<string, string>;
 }
 
 const NOT_A_REPO = "fatal: not a git repository (or any of the parent directories): .git";
@@ -85,6 +105,15 @@ const USAGE = `usage: git <command> [<args>]
    switch   move to another branch (-c creates it, - jumps back)
    checkout older spelling of switch (branch forms only)
    merge    bring another branch into this one (--no-ff, --continue, --abort)
+   restore  throw away changes; --staged takes a file back out of the index
+   reset    move a branch backwards (--soft keeps changes, --hard discards)
+   stash    shelve uncommitted work (stash list, stash pop)
+   tag      mark a commit with a name (lightweight tags)
+   remote   list servers this repo knows (remote add <name> <path>)
+   push     upload a branch (push [-u] <remote> <branch>)
+   fetch    download a remote's branches (updates <remote>/<branch> refs)
+   pull     fetch and fast-forward the current branch
+   clone    copy a remote repository into a new folder
 
 'git help <command>' explains one command.`;
 
@@ -143,12 +172,17 @@ DESCRIPTION
   log: `git log - show commit history, newest first
 
 USAGE
-  git log [--oneline] [--stat] [-p] [-n <number>]
+  git log [--oneline] [--stat] [-p] [-n <number>] [<ref>]
+  git log --grep <text>            only commits whose message contains <text>
+  git log --author <name>          only commits by that author
+  git log --since <date> [--until <date>]  only commits that day or later
+                                    (dates are YYYY-MM-DD)
 
 DESCRIPTION
   Each entry shows the commit id, the author, the date and the message.
   --oneline collapses each commit to one line, --stat lists the files
-  each commit changed, -p shows the full patch, -n limits to the last N.`,
+  each commit changed, -p shows the full patch, -n limits to the last N.
+  With a <ref> (branch, tag or id) the walk starts there instead of HEAD.`,
   show: `git show - one commit's message and changes
 
 USAGE
@@ -162,8 +196,10 @@ DESCRIPTION
 USAGE
   git diff                          changes not yet staged
   git diff --staged                 changes about to be committed
-  git diff <commit1> <commit2>      changes between two commits
+  git diff <commit1> <commit2>      changes between two commits (ids, branches, tags)
   git diff <commit>                 changes since that commit
+  git diff --name-only              just the names of the changed files
+  git diff -- <path>...             only those paths
 
 DESCRIPTION
   '-' lines were removed, '+' lines were added. Untracked files never
@@ -190,7 +226,7 @@ DESCRIPTION
 USAGE
   git branch                 list local branches (* marks the one you are on)
   git branch -v              also show each branch's last commit
-  git branch -a              list every branch (this simulator has no remotes)
+  git branch -a              local branches plus origin/main tracking refs
   git branch <name>          create a branch here, without switching to it
   git branch -d <name>       delete a branch that is fully merged (safe)
   git branch -D <name>       delete it even when it is not merged
@@ -239,6 +275,95 @@ DESCRIPTION
   stop with conflict markers (<<<<<<< HEAD ... ======= ... >>>>>>>) in the
   working tree: edit them, then run git merge --continue (it stages the
   resolution), or give up with git merge --abort.`,
+  restore: `git restore - throw away changes or unstage a file
+
+USAGE
+  git restore <file>...           discard uncommitted edits (back to the index)
+  git restore --staged <file>...  unstage: put the file back in the index as
+                                  it looks in the last commit
+
+DESCRIPTION
+  The safe undo: it never touches history, only files. --staged is how you
+  take something back out of the staging area before committing.`,
+  reset: `git reset - move a branch (and maybe the working tree) backwards
+
+USAGE
+  git reset --soft <commit>    move the branch only - changes stay staged
+  git reset [--mixed] <commit> move the branch and unstage - files keep edits
+  git reset --hard <commit>    move the branch and throw everything away
+
+DESCRIPTION
+  Reset rewrites where a branch points. --soft is how you redo a commit
+  with a better message (reset --soft HEAD~1, then commit again); --hard
+  is the emergency button that discards changes. The commit defaults to HEAD.`,
+  stash: `git stash - temporarily shelve uncommitted work
+
+USAGE
+  git stash           save your dirty work and clean the working tree
+  git stash list      show saved stashes (stash@{0} is the newest)
+  git stash pop       put the newest stash back and drop it
+
+DESCRIPTION
+  Stashing answers "I need a clean tree right now": save your edits,
+  switch or merge safely, then pop them back where you left off.
+  Only tracked files are stashed; untracked files stay put.`,
+  tag: `git tag - mark a commit with a name
+
+USAGE
+  git tag             list all tags
+  git tag <name> [<ref>]  create a tag at <ref> (default: HEAD)
+
+DESCRIPTION
+  Tags are permanent labels for releases: name a commit v1.0, then log,
+  show and diff accept the name anywhere a commit is expected.`,
+  remote: `git remote - list the servers this repository talks to
+
+USAGE
+  git remote                    list them (with fetch/push lines)
+  git remote add <name> <path>  remember a repository file as a server
+
+DESCRIPTION
+  A remote is just a stored address. The simulator's remotes point at
+  other repository files on this disk, so push/fetch/clone really move
+  commits between them.`,
+  push: `git push - upload your commits to a remote
+
+USAGE
+  git push [-u] <remote> <branch>
+
+DESCRIPTION
+  Copies the branch's commits to the remote and moves its branch there.
+  Only fast-forward pushes are accepted: if the remote has commits you
+  lack, fetch (or pull) first. -u records the connection so later
+  'git push' alone knows where to go.`,
+  fetch: `git fetch - download a remote's branches without merging
+
+USAGE
+  git fetch [<remote>]          default remote: origin
+
+DESCRIPTION
+  Brings the remote's commits into your repository and refreshes the
+  remote-tracking refs (origin/main and friends) you can log, show and
+  diff. Nothing on your branches changes until you merge or pull.`,
+  pull: `git pull - fetch the current branch's upstream and fast-forward
+
+USAGE
+  git pull                      uses origin and your current branch
+
+DESCRIPTION
+  = git fetch + fast-forward. Your branch must be strictly behind the
+  upstream (origin/<branch>); if you have diverged, merge by hand instead.
+  Uncommitted changes that would be overwritten stop the pull.`,
+  clone: `git clone - copy a remote repository into a new folder
+
+USAGE
+  git clone <path> [<directory>]
+
+DESCRIPTION
+  Creates <directory> (named after the path by default) containing the
+  remote's full history, checked-out files, and origin preconfigured —
+  the other half of push: commit here, push, then clone or pull over
+  there.`,
 };
 
 // ---------- config storage ----------
@@ -460,6 +585,14 @@ function resolveCommit(meta: GitMeta, ref: string): { commit: GitCommit; index: 
       current = next;
     }
     return { commit: current, index: commitIndex(meta, current.id) };
+  }
+  const named =
+    branchTips(meta)[ref] ??
+    (meta.tags ? meta.tags[ref] : undefined) ??
+    (meta.tracking ? meta.tracking[ref] : undefined);
+  if (named) {
+    const c = commitById(meta, named);
+    if (c) return { commit: c, index: commitIndex(meta, c.id) };
   }
   const index = meta.commits.findIndex((c) => c.id.startsWith(ref));
   return index >= 0 ? { commit: meta.commits[index], index } : null;
@@ -856,6 +989,11 @@ function gitLog(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
   let all = false;
   let graph = false;
   let limit: number | null = null;
+  let grep: string | null = null;
+  let author: string | null = null;
+  let since: number | null = null;
+  let until: number | null = null;
+  let ref: string | null = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--oneline") oneline = true;
@@ -869,20 +1007,52 @@ function gitLog(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
       limit = n;
     } else if (/^-\d+$/.test(a)) {
       limit = parseInt(a.slice(1), 10);
+    } else if (a === "--grep" || a === "--author" || a === "--since" || a === "--until") {
+      const value = args[++i];
+      if (value === undefined) return fail(`fatal: option '${a}' requires a value`);
+      if (a === "--grep") grep = value;
+      else if (a === "--author") author = value;
+      else {
+        const day = /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) : NaN;
+        if (Number.isNaN(day)) return fail(`fatal: invalid date: '${value}'`);
+        if (a === "--since") since = day;
+        else until = day + 86_399_999; // inclusive: the whole day counts
+      }
+    } else if (a.startsWith("-")) {
+      return fail(`fatal: unrecognized argument: '${a}'`);
+    } else if (ref === null) {
+      ref = a;
     } else {
       return fail(`fatal: unrecognized argument: '${a}'`);
     }
   }
 
-  // History = everything reachable from the current branch's tip (or from
-  // every branch tip with --all), newest first. Merges pull in both parents.
-  const tips = all
-    ? [...new Set(Object.values(branchTips(meta)).filter((t) => t.length > 0))]
-    : [tipOf(meta, meta.branch)];
-  const pool = byRecency(meta, reachable(meta, tips));
+  // History = everything reachable from the given ref's tip (or from every
+  // branch tip with --all), newest first. Merges pull in both parents.
+  let tips: string[];
+  if (ref !== null) {
+    const start = resolveCommit(meta, ref);
+    if (!start) return fail(`fatal: ambiguous argument '${ref}': unknown revision or path not in the working tree`);
+    tips = [start.commit.id];
+  } else {
+    tips = all
+      ? [
+          ...new Set(
+            [...Object.values(branchTips(meta)), ...Object.values(meta.tracking ?? {})].filter(
+              (t) => t.length > 0
+            )
+          ),
+        ]
+      : [tipOf(meta, meta.branch)];
+  }
+  let pool = byRecency(meta, reachable(meta, tips));
   if (pool.length === 0) {
     return fail(`fatal: your current branch '${meta.branch}' does not have any commits yet`, 128);
   }
+  if (grep !== null) pool = pool.filter((c) => c.message.includes(grep!));
+  if (author !== null) pool = pool.filter((c) => c.author.includes(author!));
+  if (since !== null) pool = pool.filter((c) => c.time >= since!);
+  if (until !== null) pool = pool.filter((c) => c.time <= until!);
   const shown = limit === null ? pool : pool.slice(0, limit);
   const prefixes = graph ? graphPrefixes(meta, shown) : null;
 
@@ -941,9 +1111,15 @@ function gitDiff(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
   }
 
   let staged = false;
+  let nameOnly = false;
+  let sep = false;
   const refs: string[] = [];
+  const specs: string[] = [];
   for (const a of args) {
-    if (a === "--staged" || a === "--cached") staged = true;
+    if (sep) specs.push(a);
+    else if (a === "--") sep = true;
+    else if (a === "--staged" || a === "--cached") staged = true;
+    else if (a === "--name-only") nameOnly = true;
     else if (a.startsWith("-")) return fail(`fatal: unrecognized argument: '${a}'`);
     else refs.push(a);
   }
@@ -983,8 +1159,20 @@ function gitDiff(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
     }
   }
 
+  if (specs.length > 0) {
+    for (const path of [...pairs.keys()]) {
+      if (!specs.some((spec) => path === spec || path.startsWith(spec + "/"))) pairs.delete(path);
+    }
+  }
+  const changed = [...pairs.keys()]
+    .filter((path) => {
+      const { before, after } = pairs.get(path)!;
+      return before !== after;
+    })
+    .sort();
+  if (nameOnly) return ok(changed.length > 0 ? changed.join("\n") + "\n" : "");
   const blocks: string[] = [];
-  for (const path of [...pairs.keys()].sort()) {
+  for (const path of changed) {
     const { before, after } = pairs.get(path)!;
     const patch = unifiedDiff(before, after, path);
     if (patch) blocks.push(patch);
@@ -1097,6 +1285,464 @@ function graphPrefixes(meta: GitMeta, ordered: GitCommit[]): string[] {
 
 const BRANCH_NAME_RE = /^[\w][\w./-]*$/;
 
+// ---------- restore / reset / stash / tag ----------
+
+/** git restore: worktree back from the index, or index back from HEAD. */
+function gitRestore(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+  let staged = false;
+  const targets: string[] = [];
+  for (const a of args) {
+    if (a === "--staged" || a === "--cached") staged = true;
+    else if (a === "--") continue;
+    else if (a.startsWith("-")) return fail(`fatal: unrecognized argument: '${a}'`);
+    else targets.push(a);
+  }
+  if (targets.length === 0) return fail("usage: git restore [--staged] <file>...");
+
+  const head = headFiles(meta);
+  for (const rel of targets) {
+    const known = meta.tracked.includes(rel) || rel in meta.staged || deletionsOf(meta).includes(rel);
+    if (!known) return fail(`error: pathspec '${rel}' did not match any file(s) known to git`);
+    if (staged) {
+      // Index back to HEAD: drop the staged overlay entirely. A file HEAD has
+      // never seen leaves the index too (git add had marked it tracked), so it
+      // becomes untracked again; a tracked file stays tracked.
+      delete meta.staged[rel];
+      meta.stagedDeletions = deletionsOf(meta).filter((d) => d !== rel);
+      if (rel in head) {
+        if (!meta.tracked.includes(rel)) meta.tracked.push(rel);
+      } else {
+        meta.tracked = meta.tracked.filter((t) => t !== rel);
+      }
+      continue;
+    }
+    // Worktree back to the index (staged content, else HEAD). A file the
+    // index says is deleted has nothing to restore — leave it alone.
+    const content = deletionsOf(meta).includes(rel)
+      ? undefined
+      : rel in meta.staged
+        ? meta.staged[rel]
+        : head[rel];
+    if (content === undefined) continue;
+    const abs = absPath(root, rel);
+    const dir = ctx.vfs.parentOf(abs);
+    if (!ctx.vfs.isDir(dir)) ctx.vfs.ensureDir(dir);
+    ctx.vfs.writeFile(abs, content);
+  }
+  if (staged) saveRepo(ctx, root, meta);
+  return ok();
+}
+
+/** git reset: move the current branch (and optionally the tree) backwards. */
+function gitReset(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+  if (meta.merge) {
+    return fail(
+      "fatal: You have not concluded your merge (MERGE_HEAD exists).\nPlease, commit your changes or run git merge --abort first.",
+      128
+    );
+  }
+  let mode: "soft" | "mixed" | "hard" = "mixed";
+  let ref: string | null = null;
+  for (const a of args) {
+    if (a === "--soft") mode = "soft";
+    else if (a === "--mixed") mode = "mixed";
+    else if (a === "--hard") mode = "hard";
+    else if (a.startsWith("-")) return fail(`fatal: invalid option: '${a}'`);
+    else if (ref === null) ref = a;
+    else return fail(`fatal: too many arguments (from '${ref}' to '${a}')`);
+  }
+  const found = resolveCommit(meta, ref ?? "HEAD");
+  if (!found) return fail(`fatal: ambiguous argument '${ref}': unknown revision`);
+
+  const oldHead = headFiles(meta);
+  mutableBranchTips(meta)[meta.branch] = found.commit.id;
+  if (mode === "hard") checkoutFiles(ctx, root, meta, { ...found.commit.files });
+  else if (mode === "mixed") {
+    meta.staged = {};
+    meta.stagedDeletions = [];
+  } else {
+    // --soft: the index keeps whatever it held, so the undone work shows up
+    // as staged changes against the new head.
+    const index: Record<string, string> = { ...oldHead };
+    for (const [rel, content] of Object.entries(meta.staged)) index[rel] = content;
+    for (const rel of deletionsOf(meta)) delete index[rel];
+    const staged: Record<string, string> = {};
+    for (const [rel, content] of Object.entries(index)) {
+      if (found.commit.files[rel] !== content) staged[rel] = content;
+    }
+    meta.staged = staged;
+    meta.stagedDeletions = Object.keys(found.commit.files).filter((rel) => !(rel in index));
+  }
+  saveRepo(ctx, root, meta);
+  if (mode === "soft") return ok();
+  return ok(`HEAD is now at ${found.commit.id} ${found.commit.message}\n`);
+}
+
+/** git stash — save, list and pop shelve working-tree snapshots. */
+function gitStash(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+  if (args.length > 1) return fail("usage: git stash [push | list | pop]");
+  const action = args[0] ?? "push";
+
+  if (action === "list") {
+    const entries = meta.stash ?? [];
+    const lines = entries.map((e, i) => `stash@{${i}}: WIP on ${e.branch}: ${e.message}`);
+    return ok(lines.length > 0 ? lines.join("\n") + "\n" : "");
+  }
+  if (action !== "push" && action !== "save" && action !== "pop") {
+    return fail(`error: 'git stash ${action}' is not simulated (use: stash, stash list, stash pop)`, 1);
+  }
+
+  const head = headFiles(meta);
+  const headCommitRef = headCommit(meta);
+
+  if (action === "pop") {
+    const entries = meta.stash ?? [];
+    if (entries.length === 0) return fail("No stash entries found.");
+    const entry = entries[0];
+    // Refuse to clobber edits made after the stash was taken.
+    for (const rel of Object.keys(entry.files)) {
+      const abs = absPath(root, rel);
+      const work = ctx.vfs.isFile(abs) ? ctx.vfs.readFile(abs) : null;
+      if (work !== (head[rel] ?? null)) {
+        return fail(`error: local changes to '${rel}' would be overwritten by stash pop`, 1);
+      }
+    }
+    for (const [rel, content] of Object.entries(entry.files)) {
+      const abs = absPath(root, rel);
+      if (content === null) {
+        if (ctx.vfs.isFile(abs)) ctx.vfs.remove(abs, false);
+      } else {
+        const dir = ctx.vfs.parentOf(abs);
+        if (!ctx.vfs.isDir(dir)) ctx.vfs.ensureDir(dir);
+        ctx.vfs.writeFile(abs, content);
+      }
+    }
+    meta.stash = entries.slice(1);
+    saveRepo(ctx, root, meta);
+    return ok(`Dropped refs/stash@{0}\n`);
+  }
+
+  // push/save: capture tracked files that differ from HEAD, then clean them.
+  const files: Record<string, string | null> = {};
+  for (const rel of meta.tracked) {
+    const abs = absPath(root, rel);
+    const work = ctx.vfs.isFile(abs) ? ctx.vfs.readFile(abs) : null;
+    if (work !== (head[rel] ?? null)) files[rel] = work;
+  }
+  if (Object.keys(files).length === 0) return ok("No local changes to save\n");
+  for (const rel of Object.keys(files)) {
+    const abs = absPath(root, rel);
+    const back = head[rel];
+    if (back === undefined) {
+      if (ctx.vfs.isFile(abs)) ctx.vfs.remove(abs, false);
+    } else {
+      const dir = ctx.vfs.parentOf(abs);
+      if (!ctx.vfs.isDir(dir)) ctx.vfs.ensureDir(dir);
+      ctx.vfs.writeFile(abs, back);
+    }
+    delete meta.staged[rel];
+  }
+  meta.stagedDeletions = deletionsOf(meta).filter((d) => !(d in files));
+  const entry: StashEntry = {
+    branch: meta.branch,
+    message: headCommitRef ? headCommitRef.message : "",
+    time: ctx.now().getTime(),
+    files,
+  };
+  meta.stash = [entry, ...(meta.stash ?? [])];
+  saveRepo(ctx, root, meta);
+  return ok(
+    `Saved working directory and index state WIP on ${meta.branch}: ${headCommitRef ? `${headCommitRef.id} ${headCommitRef.message}` : ""}\n`
+  );
+}
+
+/** git tag — lightweight tags: list, or create at a ref (default HEAD). */
+function gitTag(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+  if (args.length === 0) {
+    const names = Object.keys(meta.tags ?? {}).sort();
+    return ok(names.length > 0 ? names.join("\n") + "\n" : "");
+  }
+  if (args.length > 2) return fail("usage: git tag [<name> [<commit>]]");
+  const name = args[0];
+  const ref = args[1] ?? "HEAD";
+  if (!/^[\w][\w./-]*$/.test(name)) return fail(`fatal: invalid tag name '${name}'`);
+  if (meta.tags && name in meta.tags) return fail(`fatal: tag '${name}' already exists`, 128);
+  const found = resolveCommit(meta, ref);
+  if (!found) return fail(`fatal: ambiguous argument '${ref}': unknown revision`, 128);
+  meta.tags = { ...(meta.tags ?? {}), [name]: found.commit.id };
+  saveRepo(ctx, root, meta);
+  return ok();
+}
+
+// ---------- remotes: remote / push / fetch / pull / clone ----------
+
+/** Parse a serialized repository file (the simulator's idea of a server). */
+function readRepoFile(ctx: ShellContext, abs: string): GitMeta | null {
+  if (!ctx.vfs.isFile(abs)) return null;
+  try {
+    const meta = JSON.parse(ctx.vfs.readFile(abs)) as GitMeta;
+    return meta && meta.version === 1 ? meta : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Copy every commit reachable from `tip` that `into` does not have yet. */
+function copyMissingCommits(into: GitMeta, from: GitMeta, tip: string): void {
+  const have = new Set(into.commits.map((c) => c.id));
+  const stack = [tip];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (have.has(id)) continue;
+    const c = from.commits.find((x) => x.id === id);
+    if (!c) continue;
+    into.commits.push({ ...c, files: { ...c.files } });
+    have.add(id);
+    for (const parent of parentsOf(from, c)) stack.push(parent);
+  }
+}
+
+/** Resolve a remote name to its server file, or report git's classic error. */
+function requireRemote(
+  ctx: ShellContext,
+  meta: GitMeta,
+  name: string
+): { path: string; server: GitMeta } | { error: string } {
+  const path = (meta.remotes ?? {})[name];
+  if (!path) return { error: `fatal: '${name}' does not appear to be a git repository` };
+  const server = readRepoFile(ctx, path);
+  if (!server) return { error: `fatal: '${path}' does not appear to be a git repository` };
+  return { path, server };
+}
+
+function gitRemote(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+
+  if (!args.length) {
+    const remotes = meta.remotes ?? {};
+    const lines: string[] = [];
+    for (const name of Object.keys(remotes).sort()) {
+      lines.push(`${name}\t${remotes[name]} (fetch)`);
+      lines.push(`${name}\t${remotes[name]} (push)`);
+    }
+    return ok(lines.length ? lines.join("\n") + "\n" : "");
+  }
+
+  if (args[0] === "add" && args.length === 3) {
+    const [, name, raw] = args;
+    if (meta.remotes && name in meta.remotes) return fail(`fatal: a remote named '${name}' already exists`);
+    if (!/^[\w][\w./-]*$/.test(name)) return fail(`fatal: invalid remote name '${name}'`);
+    const abs = ctx.vfs.resolve(raw);
+    if (!readRepoFile(ctx, abs)) return fail(`fatal: '${raw}' does not appear to be a git repository`, 128);
+    meta.remotes = { ...(meta.remotes ?? {}), [name]: abs };
+    saveRepo(ctx, root, meta);
+    return ok();
+  }
+  return fail("usage: git remote [add <name> <path>]");
+}
+
+function gitPush(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+
+  let upstream = false;
+  const positional: string[] = [];
+  for (const a of args) {
+    if (a === "-u" || a === "--set-upstream") upstream = true;
+    else if (a.startsWith("-")) return fail(`git push: unknown option '${a}'`);
+    else positional.push(a);
+  }
+  if (positional.length !== 2) return fail("usage: git push [-u] <remote> <branch>");
+  const [remoteName, branchName] = positional;
+
+  const remote = requireRemote(ctx, meta, remoteName);
+  if ("error" in remote) return fail(remote.error, 128);
+  const { path, server } = remote;
+  if (!(branchName in branchTips(meta))) {
+    return fail(`error: src refspec ${branchName} does not match any source`, 128);
+  }
+
+  const localTip = tipOf(meta, branchName);
+  const serverTips = mutableBranchTips(server);
+  const remoteTip = serverTips[branchName] ?? "";
+  if (remoteTip === localTip) {
+    // An up-to-date push still records the remote-tracking ref: that is what
+    // -u promises and what git pull / git log origin/main read afterwards.
+    meta.tracking = { ...(meta.tracking ?? {}), [`${remoteName}/${branchName}`]: localTip };
+    saveRepo(ctx, root, meta);
+    return ok("Everything up-to-date\n");
+  }
+  if (remoteTip && !isAncestor(meta, remoteTip, localTip)) {
+    return fail(
+      `! [rejected]    ${branchName} -> ${branchName} (non-fast-forward)\n` +
+        `error: failed to push some refs to '${path}'\n` +
+        `hint: Updates were rejected because the remote contains work that you do not have locally.`,
+      1
+    );
+  }
+
+  copyMissingCommits(server, meta, localTip);
+  serverTips[branchName] = localTip;
+  ctx.vfs.writeFile(path, JSON.stringify(server));
+
+  // Every push refreshes the remote-tracking ref; -u is accepted for the
+  // classic muscle-memory form even though upstreams are not modeled further.
+  meta.tracking = { ...(meta.tracking ?? {}), [`${remoteName}/${branchName}`]: localTip };
+  saveRepo(ctx, root, meta);
+
+  const arrow = remoteTip
+    ? `${remoteTip}..${localTip}  ${branchName} -> ${branchName}`
+    : ` * [new branch]      ${branchName} -> ${branchName}`;
+  return ok(`To ${path}\n${arrow}\n`);
+}
+
+function gitFetch(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+  if (args.length >= 2) return fail("usage: git fetch [<remote>]");
+  const remoteName = args[0] ?? "origin";
+
+  const remote = requireRemote(ctx, meta, remoteName);
+  if ("error" in remote) return fail(remote.error, 128);
+  const { path, server } = remote;
+
+  const lines: string[] = [];
+  for (const [branch, tip] of Object.entries(branchTips(server))) {
+    if (!tip) continue;
+    copyMissingCommits(meta, server, tip);
+    const ref = `${remoteName}/${branch}`;
+    meta.tracking = { ...(meta.tracking ?? {}), [ref]: tip };
+    lines.push(` * branch            ${branch} -> ${ref}`);
+  }
+  saveRepo(ctx, root, meta);
+  return ok(`From ${path}\n` + (lines.length ? lines.join("\n") + "\n" : ""));
+}
+
+function gitPull(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+  if (args.length) return fail("usage: git pull");
+  if (meta.merge) {
+    return fail(
+      "fatal: You have not concluded your merge (MERGE_HEAD exists).\nPlease, commit your changes or run git merge --abort first.",
+      128
+    );
+  }
+
+  // The upstream is <remote>/<current branch> for some configured remote.
+  const remotes = meta.remotes ?? {};
+  let remoteName: string | null = null;
+  for (const name of Object.keys(remotes)) {
+    if ((meta.tracking ?? {})[`${name}/${meta.branch}`]) {
+      remoteName = name;
+      break;
+    }
+  }
+  if (!remoteName) {
+    return fail(`There is no tracking information for the current branch '${meta.branch}'.`, 1);
+  }
+  const remote = requireRemote(ctx, meta, remoteName);
+  if ("error" in remote) return fail(remote.error, 128);
+  const { path, server } = remote;
+
+  // fetch first: refresh tracking and download any new commits
+  const serverTips = branchTips(server);
+  for (const tip of Object.values(serverTips)) {
+    if (tip) copyMissingCommits(meta, server, tip);
+  }
+  const upstreamTip = serverTips[meta.branch] ?? "";
+  meta.tracking = { ...(meta.tracking ?? {}), [`${remoteName}/${meta.branch}`]: upstreamTip };
+  saveRepo(ctx, root, meta);
+
+  const localTip = tipOf(meta, meta.branch);
+  if (!upstreamTip || upstreamTip === localTip) return ok("Already up to date.\n");
+  if (!isAncestor(meta, localTip, upstreamTip)) {
+    return fail("fatal: Not possible to fast-forward, aborting.\nYou need to do a merge first.", 1);
+  }
+  const dirty = dirtyPaths(ctx, root, meta);
+  if (dirty.length) {
+    return fail(
+      `error: Your local changes to the following files would be overwritten by pull:\n` +
+        dirty.map((f) => `\t${f}`).join("\n") +
+        `\nPlease commit your changes or stash them before you pull.\nAborting`,
+      1
+    );
+  }
+  const oldFiles = headFiles(meta);
+  const target = commitById(meta, upstreamTip);
+  if (!target) return fail(`fatal: '${path}' does not appear to be a git repository`, 128);
+  checkoutFiles(ctx, root, meta, { ...target.files });
+  mutableBranchTips(meta)[meta.branch] = upstreamTip;
+  saveRepo(ctx, root, meta);
+  return ok(`Updating ${localTip}..${upstreamTip}\nFast-forward\n${statBlock(oldFiles, target.files)}\n`);
+}
+
+function gitClone(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  // cloning FROM inside a repository is fine
+  if (args.length === 0 || args.length >= 3) return fail("usage: git clone <path> [<directory>]");
+
+  const srcAbs = ctx.vfs.resolve(args[0]);
+  const server = readRepoFile(ctx, srcAbs);
+  if (!server || !server.commits.length) return fail(`fatal: repository '${args[0]}' does not exist`, 128);
+
+  const base = srcAbs.split("/").pop() ?? "repo";
+  const dirName = args[1] ?? (base.endsWith(".git") ? base.slice(0, -4) : base);
+  const target = ctx.vfs.resolve(dirName);
+  if (ctx.vfs.exists(target)) {
+    return fail(`fatal: destination path '${dirName}' already exists and is not an empty directory.`, 128);
+  }
+
+  const tips = { ...branchTips(server) };
+  if (!tips[server.branch]) {
+    const fallback = Object.entries(tips).find(([, t]) => t);
+    if (fallback) server.branch = fallback[0];
+  }
+  const checkout = commitById(server, tips[server.branch] ?? "");
+  const clone: GitMeta = {
+    version: 1,
+    branch: server.branch,
+    branches: tips,
+    commits: server.commits.map((c) => ({ ...c, files: { ...c.files } })),
+    staged: {},
+    stagedDeletions: [],
+    tracked: checkout ? Object.keys(checkout.files).sort() : [...server.tracked],
+    local: { ...server.local },
+    remotes: { origin: srcAbs },
+    tracking: {},
+  };
+  if (server.tags) clone.tags = { ...server.tags };
+  for (const [branch, tip] of Object.entries(tips)) {
+    if (tip) clone.tracking![`origin/${branch}`] = tip;
+  }
+
+  ctx.vfs.ensureDir(target);
+  ctx.vfs.writeFile(target + "/.git", JSON.stringify(clone));
+  for (const [rel, content] of Object.entries(checkout ? checkout.files : {})) {
+    const abs = target + "/" + rel;
+    const dir = ctx.vfs.parentOf(abs);
+    if (!ctx.vfs.isDir(dir)) ctx.vfs.ensureDir(dir);
+    ctx.vfs.writeFile(abs, content);
+  }
+  return ok(`Cloning into '${dirName}'...\n`);
+}
+
 function gitBranch(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
   const repo = findRepo(ctx);
   if (!repo) return fail(NOT_A_REPO, 128);
@@ -1104,13 +1750,12 @@ function gitBranch(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
   const tips = mutableBranchTips(meta);
 
   let showLast = false;
+  let showAll = false;
   let mode: "list" | "delete" | "force-delete" | "rename" = "list";
   const positional: string[] = [];
   for (const a of args) {
     if (a === "-v" || a === "-vv" || a === "--verbose") showLast = true;
-    else if (a === "-a" || a === "--all") {
-      // No remotes in the simulator: -a lists exactly the local branches.
-    } else if (a === "-d" || a === "--delete") mode = "delete";
+    else if (a === "-a" || a === "--all") showAll = true; else if (a === "-d" || a === "--delete") mode = "delete";
     else if (a === "-D" || a === "--force-delete") mode = "force-delete";
     else if (a === "-m" || a === "--move") mode = "rename";
     else if (a.startsWith("-")) return fail(`git branch: unknown option '${a}'`);
@@ -1167,6 +1812,13 @@ function gitBranch(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
     const c = commitById(meta, tip);
     return `${marker}${name}  ${tip} ${c ? c.message : ""}`.trimEnd();
   });
+  if (showAll) {
+    for (const ref of Object.keys(meta.tracking ?? {}).sort()) {
+      const tip = meta.tracking![ref];
+      const c = tip ? commitById(meta, tip) : null;
+      lines.push(showLast && c ? `  ${ref}  ${tip} ${c.message}` : `  ${ref}`);
+    }
+  }
   return ok(lines.length > 0 ? lines.join("\n") + "\n" : "");
 }
 
@@ -1524,6 +2176,24 @@ function gitDispatch(ctx: ShellContext, args: string[]): ReturnType<CommandImpl>
       return gitCheckout(ctx, args.slice(1));
     case "merge":
       return gitMerge(ctx, args.slice(1));
+    case "restore":
+      return gitRestore(ctx, args.slice(1));
+    case "reset":
+      return gitReset(ctx, args.slice(1));
+    case "stash":
+      return gitStash(ctx, args.slice(1));
+    case "tag":
+      return gitTag(ctx, args.slice(1));
+    case "remote":
+      return gitRemote(ctx, args.slice(1));
+    case "push":
+      return gitPush(ctx, args.slice(1));
+    case "fetch":
+      return gitFetch(ctx, args.slice(1));
+    case "pull":
+      return gitPull(ctx, args.slice(1));
+    case "clone":
+      return gitClone(ctx, args.slice(1));
     default:
       return fail(`git: '${sub}' is not a git command. See 'git --help'.`);
   }

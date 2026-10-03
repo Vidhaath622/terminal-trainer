@@ -1,13 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { LAUNCH_PROBLEMS, getLaunchProblem, gitProblems, GIT_PROBLEM_TAGS } from "./launch";
+import { GIT_PRACTICE_PROBLEMS, GIT_SOLUTIONS } from "./git-problems";
 import { Session } from "@/engine/session";
 import { maxMarks } from "@/engine/grader";
 
 describe("launch problem set", () => {
-  it("has exactly 31 valid problems", () => {
-    expect(LAUNCH_PROBLEMS).toHaveLength(31);
+  // 31 launch problems + the git practice track (31 + 30 = 61 in the end).
+  it("has exactly 31 + practice valid problems", () => {
+    expect(LAUNCH_PROBLEMS).toHaveLength(31 + GIT_PRACTICE_PROBLEMS.length);
     const ids = LAUNCH_PROBLEMS.map((p) => p.id);
-    expect(new Set(ids).size).toBe(31);
+    expect(new Set(ids).size).toBe(LAUNCH_PROBLEMS.length);
   });
 
   it("lookup finds a problem by id", () => {
@@ -19,6 +21,20 @@ describe("launch problem set", () => {
     for (const p of LAUNCH_PROBLEMS) {
       expect(maxMarks(p)).toBeGreaterThan(0);
       expect(p.steps.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
+describe("git practice track", () => {
+  it("every practice problem is unique, deep enough and tagged for git", () => {
+    const launchIds = new Set(LAUNCH_PROBLEMS.map((p) => p.id));
+    expect(GIT_PRACTICE_PROBLEMS.length).toBeLessThanOrEqual(30);
+    for (const p of GIT_PRACTICE_PROBLEMS) {
+      expect(launchIds.has(p.id), `duplicate id: ${p.id}`).toBe(true);
+      expect(p.steps.length, `${p.id} needs at least five steps`).toBeGreaterThanOrEqual(5);
+      expect(p.tags, `${p.id} must be tagged git`).toContain("git");
+      expect(GIT_SOLUTIONS[p.id], `no solution recorded for ${p.id}`).toBeDefined();
+      expect(GIT_SOLUTIONS[p.id].length).toBeGreaterThan(0);
     }
   });
 });
@@ -46,6 +62,7 @@ describe("git problem filter", () => {
 describe("launch problems are solvable to full marks", () => {
   // The intended solution for each problem, as a student would type it.
   const solutions: Record<string, string[]> = {
+    ...GIT_SOLUTIONS,
     "pwd-navigate": ["pwd", "ls", "cd documents", "cd ~"],
     "ls-inspect": [
       "cat README.md",

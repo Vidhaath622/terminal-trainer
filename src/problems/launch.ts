@@ -1,10 +1,12 @@
 /**
  * Launch problem set for first-year CS students.
- * Authored content: 31 problems from navigation to a boss challenge,
- * including a twelve-problem Git fundamentals track.
+ * Authored content: the original 31 problems from navigation to a boss
+ * challenge (including a twelve-problem Git fundamentals track), plus the
+ * thirty-problem Git practice track imported from ./git-problems -- 61 in all.
  * Pure TypeScript (data) so it can be imported anywhere.
  */
 import { problemSchema, type Problem } from "@/engine/schema";
+import { GIT_PRACTICE_PROBLEMS } from "./git-problems";
 
 // ---------- Git practice fixtures ----------
 
@@ -2460,7 +2462,10 @@ id: "s4",
   },
 ];
 
-export const LAUNCH_PROBLEMS: Problem[] = rawProblems.map((p) => problemSchema.parse(p));
+export const LAUNCH_PROBLEMS: Problem[] = [
+  ...rawProblems.map((p) => problemSchema.parse(p)),
+  ...GIT_PRACTICE_PROBLEMS,
+];
 
 export function getLaunchProblem(id: string): Problem | undefined {
   return LAUNCH_PROBLEMS.find((p) => p.id === id);
