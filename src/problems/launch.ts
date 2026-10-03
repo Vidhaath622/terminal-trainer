@@ -1,7 +1,7 @@
 /**
  * Launch problem set for first-year CS students.
- * Authored content: 30 problems from navigation to a boss challenge,
- * including a ten-problem Git fundamentals track.
+ * Authored content: 31 problems from navigation to a boss challenge,
+ * including a twelve-problem Git fundamentals track.
  * Pure TypeScript (data) so it can be imported anywhere.
  */
 import { problemSchema, type Problem } from "@/engine/schema";
@@ -23,8 +23,15 @@ const README_V2 = "# Demo\n\nLearning git.\n";
  * Shape matches GitMeta in engine/commands/git-commands.ts.
  */
 function gitFixture(
-  commits: Array<{ id: string; message: string; time: number; files: Record<string, string> }>,
-  staged: Record<string, string> = {}
+  commits: Array<{
+    id: string;
+    message: string;
+    time: number;
+    files: Record<string, string>;
+    parents?: string[];
+  }>,
+  staged: Record<string, string> = {},
+  branches?: Record<string, string>
 ): string {
   return JSON.stringify({
     version: 1,
@@ -33,6 +40,7 @@ function gitFixture(
     staged,
     tracked: Object.keys(commits[commits.length - 1].files).sort(),
     local: {},
+    ...(branches ? { branches } : {}),
   });
 }
 
@@ -77,6 +85,31 @@ const GIT_AM_FIXTURE = gitFixture([
 const GIT_RM_FIXTURE = gitFixture([
   { id: "f0a1b2c", message: "First draft", time: 1727769600000, files: { "app.py": HELLO_V1, "temp.log": "debug line\n", "draft.txt": "v1\n" } },
 ]);
+
+/**
+ * Two commits on main, the second editing app.py. Students branch from here,
+ * change app.py on both sides, and hit a real merge conflict.
+ */
+const GIT_BRANCH_FIXTURE = gitFixture(
+  [
+    {
+      id: "a1b2c3d",
+      message: "Start the project",
+      time: 1727769600000,
+      files: { "app.py": HELLO_V1, "README.md": README_V1 },
+      parents: [],
+    },
+    {
+      id: "b4c5d6e",
+      message: "Add main line",
+      time: 1727856000000,
+      files: { "app.py": 'print("hello")\nprint("main was here")\n', "README.md": README_V1 },
+      parents: ["a1b2c3d"],
+    },
+  ],
+  {},
+  { main: "b4c5d6e" }
+);
 
 const rawProblems = [
   {
@@ -2206,6 +2239,147 @@ id: "s4",
           { type: "outputContains" as const, value: "Untracked files:", marks: 2 },
           { type: "outputContains" as const, value: "notes.txt", marks: 1 },
           { type: "fileExists" as const, path: "/home/student/project/notes.txt", marks: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "git-branch-merge",
+    title: "Branch, Switch, Merge",
+    difficulty: "hard" as const,
+    tags: ["git", "branch", "switch", "merge", "commit"],
+    brief:
+      "The 'Git branching & merging' notes end to end: branch off with git branch, move over with git switch, commit on each side, then merge. Both sides touch app.py, so Git stops you with a conflict — resolve it by hand and finish with git merge --continue.",
+    fs: {
+      dirs: ["/home/student/project"],
+      files: [
+        { path: "/home/student/project/app.py", content: 'print("hello")\nprint("main was here")\n' },
+        { path: "/home/student/project/README.md", content: README_V1 },
+        { path: "/home/student/project/.git", content: GIT_BRANCH_FIXTURE },
+      ],
+      home: "/home/student/project",
+      user: "student",
+    },
+    steps: [
+      {
+        id: "s1",
+        prompt: "List every local branch: git branch. The line starting with '*' is where you stand.",
+        hints: ["Run it with no arguments: git branch prints each branch name, and * marks the current one."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "* main", marks: 3 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s2",
+        prompt: "Create a branch named feature without moving: git branch feature. Then run git branch again to see both.",
+        hints: [
+          "A branch is just a name pointing at the commit you are on now — git branch <name> prints nothing when it works.",
+          "The listing should now show '* main' and a '  feature' line.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "branchExists" as const, branch: "feature", marks: 2 },
+          { type: "outputContains" as const, value: "* main", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s3",
+        prompt: "Move HEAD over: git switch feature.",
+        hints: ["git switch <branch> checks out that branch's files; the confirmation reads \"Switched to branch 'feature'\"."],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Switched to branch 'feature'", marks: 3 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s4",
+        prompt: "Make a change on the branch: echo 'print(\"shipped\")' >> app.py, git add app.py, then git commit -m \"Add shipped line\".",
+        hints: [
+          "Three commands: append the line, stage it, commit it — all while feature is checked out.",
+          "The commit line reads \"[feature ...] Add shipped line\".",
+        ],
+        marks: 4,
+        checks: [
+          { type: "fileContains" as const, path: "/home/student/project/app.py", value: "print(\"shipped\")", marks: 2 },
+          { type: "outputContains" as const, value: "Add shipped line", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s5",
+        prompt: "Go back: git switch main. Then cat app.py — what happened to your shipped line?",
+        hints: [
+          "Switching restores the target branch's files; the shipped line only exists on feature.",
+          "app.py on main again ends with print(\"main was here\").",
+        ],
+        marks: 4,
+        checks: [
+          { type: "onBranch" as const, branch: "main", marks: 2 },
+          { type: "fileContains" as const, path: "/home/student/project/app.py", value: "print(\"main was here\")", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s6",
+        prompt: "Diverge on purpose: echo 'print(\"hotfix\")' >> app.py, git add app.py, git commit -m \"Fix a bug\". Now both branches change app.py.",
+        hints: [
+          "Same three beats as before — append, stage, commit — but this time you are on main.",
+          "The commit line reads \"[main ...] Fix a bug\".",
+        ],
+        marks: 4,
+        checks: [
+          { type: "fileContains" as const, path: "/home/student/project/app.py", value: "print(\"hotfix\")", marks: 2 },
+          { type: "outputContains" as const, value: "Fix a bug", marks: 1 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s7",
+        prompt: "Join the branches: git merge feature. Read the CONFLICT message Git prints.",
+        hints: [
+          "git merge <branch> brings the other branch into the one you are on — you are already on main.",
+          "Both sides edited app.py, so Git refuses to guess and marks the file with <<<<<<< and >>>>>>> lines.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "errorContains" as const, value: "Merge conflict in app.py", marks: 3 },
+          { type: "commandUsed" as const, commands: ["git"], marks: 1 },
+        ],
+      },
+      {
+        id: "s8",
+        prompt: "Resolve it yourself: rewrite app.py so it keeps print(\"hello\"), print(\"main was here\"), print(\"shipped\") and print(\"hotfix\") with no <<<<<<< markers left.",
+        hints: [
+          "echo 'print(\"hello\")' > app.py, then append the other three lines with >>.",
+          "Git only accepts the resolution once the <<<<<<<, ======= and >>>>>>> lines are gone.",
+        ],
+        marks: 4,
+        checks: [
+          {
+            type: "fileMatches" as const,
+            path: "/home/student/project/app.py",
+            pattern: "^(?![\\s\\S]*<<<<<<<)(?![\\s\\S]*>>>>>>>)(?![\\s\\S]*\\n=======\\n)[\\s\\S]*$",
+            marks: 2,
+          },
+          { type: "fileContains" as const, path: "/home/student/project/app.py", value: "print(\"shipped\")", marks: 1 },
+          { type: "fileContains" as const, path: "/home/student/project/app.py", value: "print(\"hotfix\")", marks: 1 },
+        ],
+      },
+      {
+        id: "s9",
+        prompt: "Stage the resolved file — git add app.py — then finish the job: git merge --continue.",
+        hints: [
+          "git add tells Git the conflict is resolved.",
+          "git merge --continue records the merge commit; watch for \"Merge branch 'feature'\" in the output.",
+        ],
+        marks: 4,
+        checks: [
+          { type: "outputContains" as const, value: "Merge branch 'feature'", marks: 2 },
+          { type: "commandUsedWithFlag" as const, command: "git", flag: "--continue", marks: 2 },
         ],
       },
     ],

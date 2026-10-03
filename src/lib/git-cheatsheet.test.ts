@@ -5,7 +5,7 @@
  * drift apart.
  */
 import { describe, it, expect } from "vitest";
-import { GIT_CHEAT_FLOW, GIT_CHEAT_SHEET } from "./git-cheatsheet";
+import { GIT_BRANCH_FLOW, GIT_CHEAT_FLOW, GIT_CHEAT_SHEET } from "./git-cheatsheet";
 
 /** Subcommands the simulated git dispatches (see git-commands.ts). */
 const DISPATCHED = new Set([
@@ -19,10 +19,14 @@ const DISPATCHED = new Set([
   "diff",
   "rm",
   "mv",
+  "branch",
+  "switch",
+  "checkout",
+  "merge",
 ]);
 
 describe("git cheat sheet", () => {
-  it("mirrors the chart: three areas, two transitions, seven sections", () => {
+  it("mirrors the chart: three areas, two transitions, twelve sections", () => {
     expect(GIT_CHEAT_FLOW.boxes).toEqual(["Working directory", "Staging area", "Repository"]);
     expect(GIT_CHEAT_FLOW.subtitles).toEqual(["your files", "next commit", "saved history"]);
     expect(GIT_CHEAT_FLOW.steps).toEqual(["git add", "git commit"]);
@@ -34,7 +38,22 @@ describe("git cheat sheet", () => {
       "History",
       "Compare",
       "Remove and rename",
+      "See the branches",
+      "Create",
+      "Switch",
+      "Merge",
+      "Delete and rename",
     ]);
+  });
+
+  it("mirrors the branching chart: main to feature and back again", () => {
+    expect(GIT_BRANCH_FLOW.boxes).toEqual(["main", "feature branch", "main again"]);
+    expect(GIT_BRANCH_FLOW.subtitles).toEqual([
+      "where you start",
+      "your changes live here",
+      "feature merged in",
+    ]);
+    expect(GIT_BRANCH_FLOW.steps).toEqual(["git switch -c", "git merge"]);
   });
 
   it("every runnable entry uses a subcommand the engine dispatches", () => {

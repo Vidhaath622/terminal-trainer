@@ -15,6 +15,12 @@ export interface TerminalViewProps {
   session: Session;
   /** bumps when the session is replaced (reset) so the terminal re-inits */
   sessionKey?: number;
+  /**
+   * Command pre-typed at the prompt of a fresh terminal (no history yet),
+   * so it is sitting there blinking, ready to run. Display-only: the line is
+   * ordinary input, Enter runs it through session.run() as usual.
+   */
+  initialCommand?: string;
 }
 
 const PROMPT_COLOR = "\x1b[38;5;71m";
@@ -28,7 +34,7 @@ function shortCwd(cwd: string, home: string): string {
   return cwd;
 }
 
-export default function TerminalView({ session, sessionKey = 0 }: TerminalViewProps) {
+export default function TerminalView({ session, sessionKey = 0, initialCommand }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const lineRef = useRef("");
@@ -37,6 +43,10 @@ export default function TerminalView({ session, sessionKey = 0 }: TerminalViewPr
   useEffect(() => {
     let disposed = false;
     let term: Terminal | null = null;
+    // Every (re)init starts from an empty input line; a line typed before a
+    // reset must not leak into the fresh terminal.
+    lineRef.current = "";
+    historyIndexRef.current = null;
 
     const promptText = () => `${session.shell.user}@trainer:${shortCwd(session.vfs.cwd, session.problem.fs.home)}$ `;
 
@@ -122,7 +132,21 @@ export default function TerminalView({ session, sessionKey = 0 }: TerminalViewPr
       term = t;
       termRef.current = t;
       t.open(containerRef.current);
+      // xterm draws no cursor at all until the terminal is focused, receives a
+      // key, or switches buffer — an idle terminal would have nothing to blink.
+      // A no-op round-trip through the alternate screen initializes the cursor
+      // without touching the visible buffer or stealing focus; the blink in
+      // globals.css then keeps it alive while the terminal sits untouched.
+      t.write("\x1b[?1049h\x1b[?1049l");
+      // Banner first, then the prompt: writing the prompt before the banner
+      // glues the banner onto the prompt line and leaves the input line bare.
+      t.writeln("\x1b[38;5;71mTerminal Trainer\x1b[0m \x1b[38;5;245msimulated shell\x1b[0m");
+      t.writeln("\x1b[38;5;245mType \x1b[38;5;110mhelp\x1b[0m for commands, \x1b[38;5;110mman <cmd>\x1b[0m for details. Tab completes, arrows recall.\x1b[0m");
       t.write(`${PROMPT_COLOR}${promptText()}${RESET}`);
+      if (initialCommand && session.shell.history.length === 0) {
+        lineRef.current = initialCommand;
+        t.write(initialCommand);
+      }
 
       t.onData((data) => {
         const ENTER = "\r";
@@ -197,9 +221,6 @@ export default function TerminalView({ session, sessionKey = 0 }: TerminalViewPr
         return true;
       });
 
-      // welcome banner
-      t.writeln("\x1b[38;5;71mTerminal Trainer\x1b[0m \x1b[38;5;245msimulated shell\x1b[0m");
-      t.writeln("\x1b[38;5;245mType \x1b[38;5;110mhelp\x1b[0m for commands, \x1b[38;5;110mman <cmd>\x1b[0m for details. Tab completes, arrows recall.\x1b[0m");
     });
 
     return () => {

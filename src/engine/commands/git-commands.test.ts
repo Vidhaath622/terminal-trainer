@@ -323,3 +323,237 @@ describe("git log flags, show, diff, rm, mv", () => {
     expect(bare.run("git mv a b").error).toContain("not a git repository");
   });
 });
+
+describe("git branch / switch / merge", () => {
+  let sh: Shell;
+
+  /** Fresh repo on main with one commit: README.md = "version 1\n". */
+  function freshRepo() {
+    _resetClock();
+    sh = makeShell({ dirs: ["/home/student/proj"], home: "/home/student" } as never);
+    sh.run(`git config --global user.name "Ada Lovelace"`);
+    sh.run("git config --global user.email ada@example.com");
+    sh.run("git config --global init.defaultBranch main");
+    sh.run("cd proj");
+    sh.run("git init");
+    sh.run(`echo "version 1" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Start"`);
+  }
+
+  beforeEach(freshRepo);
+
+  it("lists branches with * on the current one and -v adds the last commit", () => {
+    sh.run("git branch feature");
+    const out = sh.run("git branch").stdout;
+    expect(out).toContain("* main");
+    expect(out).toContain("  feature");
+
+    const verbose = sh.run("git branch -v").stdout;
+    expect(verbose).toMatch(/\* main\s+\w{7} Start/);
+    expect(verbose).toContain("feature");
+    // -a has nothing extra to show: the simulator has no remotes
+    expect(sh.run("git branch -a").stdout).toBe(out);
+  });
+
+  it("switch moves HEAD and the working tree, and - jumps back", () => {
+    const sw = sh.run("git switch -c feature");
+    expect(sw.stdout).toContain("Switched to a new branch 'feature'");
+    expect(sh.run("git status").stdout).toContain("On branch feature");
+
+    sh.run(`echo "version 2" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Second"`);
+
+    // back to the old commit's content
+    sh.run("git switch main");
+    expect(sh.run("cat README.md").stdout).toBe("version 1\n");
+
+    sh.run("git switch feature");
+    expect(sh.run("cat README.md").stdout).toBe("version 2\n");
+
+    sh.run("git switch -");
+    expect(sh.run("git status").stdout).toContain("On branch main");
+  });
+
+  it("checkout -b is the older spelling of switch -c", () => {
+    expect(sh.run("git checkout -b spike").stdout).toContain("Switched to a new branch 'spike'");
+    expect(sh.run("git status").stdout).toContain("On branch spike");
+    expect(sh.run("git checkout main").stdout).toContain("Switched to branch 'main'");
+  });
+
+  it("refuses to switch away from uncommitted changes", () => {
+    // "other" must point at a different commit that also touches README.md,
+    // otherwise there is nothing to overwrite (git allows that switch too).
+    sh.run("git switch -c other");
+    sh.run(`echo "other edit" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Other edit"`);
+    sh.run("git switch main");
+    sh.run(`echo "uncommitted" >> README.md`);
+    const r = sh.run("git switch other");
+    expect(r.error).toContain("would be overwritten by switch");
+    expect(sh.run("git status").stdout).toContain("modified:   README.md");
+  });
+
+  it("history is per-branch: commits on a branch stay off main", () => {
+    sh.run("git switch -c feature");
+    sh.run(`echo "feature work" >> README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Feature work"`);
+
+    sh.run("git switch main");
+    const mainLog = sh.run("git log --oneline").stdout;
+    expect(mainLog).toContain("Start");
+    expect(mainLog).not.toContain("Feature work");
+
+    // --all reaches every branch tip
+    const allLog = sh.run("git log --oneline --all").stdout;
+    expect(allLog).toContain("Feature work");
+    expect(allLog).toContain("Start");
+  });
+
+  it("merges by fast-forward and then -d accepts the branch", () => {
+    sh.run("git switch -c feature");
+    sh.run(`echo "feature work" >> README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Feature work"`);
+    sh.run("git switch main");
+
+    const merge = sh.run("git merge feature");
+    expect(merge.stdout).toContain("Fast-forward");
+    expect(sh.run("cat README.md").stdout).toContain("feature work");
+    expect(sh.run("git log --oneline").stdout).toContain("Feature work");
+
+    expect(sh.run("git branch -d feature").stdout).toContain("Deleted branch feature (was");
+  });
+
+  it("branch -d refuses unmerged work, -D forces it", () => {
+    sh.run("git switch -c feature");
+    sh.run(`echo "feature work" >> README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Feature work"`);
+    sh.run("git switch main");
+
+    const refused = sh.run("git branch -d feature");
+    expect(refused.error).toContain("not fully merged");
+    expect(sh.run("git branch").stdout).toContain("feature");
+
+    expect(sh.run("git branch -D feature").stdout).toContain("Deleted branch feature");
+    expect(sh.run("git branch").stdout).not.toContain("feature");
+  });
+
+  it("--no-ff writes a merge commit with two parents", () => {
+    sh.run("git switch -c feature");
+    sh.run(`echo "feature work" >> README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Feature work"`);
+    sh.run("git switch main");
+
+    const merge = sh.run("git merge --no-ff feature");
+    expect(merge.stdout).toContain("Merge branch 'feature'");
+    const show = sh.run("git show HEAD").stdout;
+    expect(show).toMatch(/^Merge: \w{7} \w{7}/m);
+    expect(sh.run("git log --oneline").stdout).toContain("Merge branch 'feature'");
+  });
+
+  it("divergent edits conflict, and --continue finishes after the fix", () => {
+    // feature changes the file...
+    sh.run("git switch -c feature");
+    sh.run(`echo "version 2" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Feature edit"`);
+    // ...and main changes the same file differently
+    sh.run("git switch main");
+    sh.run(`echo "version 1.1" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Main edit"`);
+
+    const clash = sh.run("git merge feature");
+    expect(clash.error).toContain("Merge conflict in README.md");
+    const conflicted = sh.run("cat README.md").stdout;
+    expect(conflicted).toContain("<<<<<<< HEAD");
+    expect(conflicted).toContain("=======");
+    expect(conflicted).toContain(">>>>>>> feature");
+
+    const status = sh.run("git status").stdout;
+    expect(status).toContain("You have unmerged paths.");
+    expect(status).toContain("both modified:   README.md");
+
+    // continuing with markers still in the file is refused
+    expect(sh.run("git merge --continue").error).toContain("conflict markers");
+
+    sh.run(`echo "merged" > README.md`);
+    const done = sh.run("git merge --continue");
+    expect(done.stdout).toContain("Merge branch 'feature'");
+    expect(sh.run("cat README.md").stdout).toBe("merged\n");
+    expect(sh.run("git status").stdout).toContain("working tree clean");
+  });
+
+  it("--abort restores the pre-merge state", () => {
+    sh.run("git switch -c feature");
+    sh.run(`echo "version 2" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Feature edit"`);
+    sh.run("git switch main");
+    sh.run(`echo "version 1.1" > README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Main edit"`);
+
+    expect(sh.run("git merge feature").error).toContain("CONFLICT");
+    expect(sh.run("git merge --abort").error).toBeNull();
+    expect(sh.run("cat README.md").stdout).toBe("version 1.1\n");
+    expect(sh.run("git status").stdout).toContain("working tree clean");
+    // the merge is over: switching works again
+    expect(sh.run("git switch feature").error).toBeNull();
+    expect(sh.run("cat README.md").stdout).toBe("version 2\n");
+  });
+
+  it("renames a branch and keeps HEAD on it", () => {
+    expect(sh.run("git branch -m main trunk").error).toBeNull();
+    expect(sh.run("git status").stdout).toContain("On branch trunk");
+    expect(sh.run("git branch").stdout).toContain("* trunk");
+    expect(sh.run("git branch").stdout).not.toContain("main");
+  });
+
+  it("switch refuses unknown branches and duplicate -c names", () => {
+    expect(sh.run("git switch nope").error).toContain("invalid reference: nope");
+    sh.run("git switch -c dupe");
+    expect(sh.run("git switch -c dupe").error).toContain("already exists");
+    expect(sh.run("git branch dupe").error).toContain("already exists");
+  });
+
+  it("log --graph draws columns across the two branch lines", () => {
+    sh.run("git switch -c feature");
+    sh.run(`echo "feature work" >> README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Feature work"`);
+    sh.run("git switch main");
+    sh.run(`echo "main work" >> README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Main work"`);
+
+    const graph = sh.run("git log --oneline --graph --all").stdout;
+    const lines = graph.trim().split("\n");
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toMatch(/^[*|] /); // both branch tips line up on the left
+    expect(lines.some((l) => l.includes("|"))).toBe(true); // the other branch's column
+    expect(graph).toContain("Main work");
+    expect(graph).toContain("Feature work");
+  });
+
+  it("HEAD~1 follows first parents after a merge", () => {
+    sh.run("git switch -c feature");
+    sh.run(`echo "feature work" >> README.md`);
+    sh.run("git add README.md");
+    sh.run(`git commit -m "Feature work"`);
+    sh.run("git switch main");
+    sh.run("git merge --no-ff feature");
+
+    const head = sh.run("git show --stat HEAD").stdout;
+    expect(head).toMatch(/^Merge: \w{7} \w{7}/m);
+    const parent = sh.run("git show --stat HEAD~1").stdout;
+    expect(parent).toContain("Start"); // first parent is main's tip...
+    expect(parent).not.toContain("Feature work"); // ...not the merged branch
+  });
+});

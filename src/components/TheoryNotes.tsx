@@ -28,7 +28,24 @@ function hashTopic(): string | null {
 function TheoryNotesInner() {
   const searchParams = useSearchParams();
   const paramTopic = searchParams.get("theory");
-  const [openId, setOpenId] = useState<string | null>(() => hashTopic());
+  // Starts closed on both server and client: seeding from location.hash here
+  // would make the first client render differ from the server's markup and
+  // break hydration on #theory-<id> deep links (the card then opens in the
+  // effect below, immediately after mount).
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  // Open the hash topic once after mount, then keep tracking hash edits /
+  // back-forward. Declared before the ?theory effect so the query param still
+  // wins when both are present, matching the old initial-state order.
+  useEffect(() => {
+    const onHash = () => {
+      const id = hashTopic();
+      if (id) setOpenId(id);
+    };
+    onHash();
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   // Open the card requested via ?theory=<id> (survives soft navigations).
   useEffect(() => {
@@ -36,16 +53,6 @@ function TheoryNotesInner() {
       setOpenId(paramTopic);
     }
   }, [paramTopic]);
-
-  // Also react to direct hash edits / back-forward while mounted.
-  useEffect(() => {
-    const onHash = () => {
-      const id = hashTopic();
-      if (id) setOpenId(id);
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">

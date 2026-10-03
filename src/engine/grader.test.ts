@@ -15,9 +15,10 @@ function makeProblem(step: Partial<Step> & { checks: Check[] }): Problem {
   });
 }
 
-function grade(checks: Check[], opts: { files?: { path: string; content: string }[]; dirs?: string[]; commands?: string[]; lastOutput?: string; lastError?: string | null; modes?: Record<string, string> } = {}) {
+function grade(checks: Check[], opts: { files?: { path: string; content: string }[]; dirs?: string[]; commands?: string[]; lastOutput?: string; lastError?: string | null; modes?: Record<string, string>; cwd?: string } = {}) {
   const vfs = new Vfs({ files: opts.files ?? [], dirs: opts.dirs ?? [] });
   for (const [p, m] of Object.entries(opts.modes ?? {})) vfs.chmod(vfs.resolve(p), m);
+  if (opts.cwd) vfs.cwd = opts.cwd;
   const problem = makeProblem({ checks });
   const step = problem.steps[0];
   return gradeStep({
@@ -259,5 +260,66 @@ describe("evaluateCheck message quality", () => {
     });
     expect(r.passed).toBe(false);
     expect(r.message).toContain("/missing");
+  });
+});
+
+describe("branch checks", () => {
+  /** Serialized .git for a repo on `branch` with the given map (undefined = legacy single branch). */
+  function gitFile(branch: string, branches?: Record<string, string>): string {
+    return JSON.stringify({ version: 1, branch, branches, commits: [{ id: "c1" }] });
+  }
+
+  it("branchExists passes for a branch in the map and fails for one that isn't there", () => {
+    const files = [{ path: "/proj/.git", content: gitFile("main", { main: "c1", feature: "c1" }) }];
+    const opts = { files, dirs: ["/proj"], cwd: "/proj" };
+    const ok = grade([{ type: "branchExists", branch: "feature", marks: 3 }], opts);
+    expect(ok.passed).toBe(true);
+    expect(ok.results[0].message).toContain("feature");
+    const bad = grade([{ type: "branchExists", branch: "hotfix", marks: 3 }], opts);
+    expect(bad.passed).toBe(false);
+    expect(bad.results[0].message).toContain("no branch named 'hotfix'");
+  });
+
+  it("branchExists finds the repository from a subdirectory", () => {
+    const r = grade([{ type: "branchExists", branch: "main", marks: 2 }], {
+      files: [{ path: "/proj/.git", content: gitFile("main", { main: "c1" }) }],
+      dirs: ["/proj", "/proj/src"],
+      cwd: "/proj/src",
+    });
+    expect(r.passed).toBe(true);
+  });
+
+  it("on a legacy repo without a branch map only the one branch exists", () => {
+    const files = [{ path: "/.git", content: gitFile("main") }];
+    expect(grade([{ type: "branchExists", branch: "main", marks: 1 }], { files }).passed).toBe(true);
+    expect(grade([{ type: "branchExists", branch: "feature", marks: 1 }], { files }).passed).toBe(false);
+  });
+
+  it("both branch checks fail cleanly outside a repository", () => {
+    const exists = grade([{ type: "branchExists", branch: "main", marks: 2 }], {});
+    expect(exists.passed).toBe(false);
+    expect(exists.results[0].message).toContain("not a git repository");
+    const on = grade([{ type: "onBranch", branch: "main", marks: 2 }], {});
+    expect(on.passed).toBe(false);
+    expect(on.results[0].message).toContain("not a git repository");
+  });
+
+  it("onBranch compares HEAD against the named branch", () => {
+    const files = [{ path: "/.git", content: gitFile("feature", { main: "c1", feature: "c2" }) }];
+    expect(grade([{ type: "onBranch", branch: "feature", marks: 4 }], { files }).passed).toBe(true);
+    const r = grade([{ type: "onBranch", branch: "main", marks: 4 }], { files });
+    expect(r.passed).toBe(false);
+    expect(r.results[0].message).toContain("expected 'main'");
+  });
+
+  it("both checks are accepted by the schema", () => {
+    const step = stepSchema.parse({
+      id: "s", prompt: "P", marks: 4,
+      checks: [
+        { type: "branchExists", branch: "feature", marks: 2 },
+        { type: "onBranch", branch: "main", marks: 2 },
+      ],
+    });
+    expect(step.checks.map((c) => c.type)).toEqual(["branchExists", "onBranch"]);
   });
 });

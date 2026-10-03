@@ -4,10 +4,10 @@ import { Session } from "@/engine/session";
 import { maxMarks } from "@/engine/grader";
 
 describe("launch problem set", () => {
-  it("has exactly 30 valid problems", () => {
-    expect(LAUNCH_PROBLEMS).toHaveLength(30);
+  it("has exactly 31 valid problems", () => {
+    expect(LAUNCH_PROBLEMS).toHaveLength(31);
     const ids = LAUNCH_PROBLEMS.map((p) => p.id);
-    expect(new Set(ids).size).toBe(30);
+    expect(new Set(ids).size).toBe(31);
   });
 
   it("lookup finds a problem by id", () => {
@@ -279,6 +279,26 @@ describe("launch problems are solvable to full marks", () => {
       "git status",
       "git commit -m \"Stop tracking notes\"",
       "git status",
+    ],
+    "git-branch-merge": [
+      "git branch",
+      "git branch feature",
+      "git branch",
+      "git switch feature",
+      "echo 'print(\"shipped\")' >> app.py",
+      "git add app.py",
+      "git commit -m \"Add shipped line\"",
+      "git switch main",
+      "echo 'print(\"hotfix\")' >> app.py",
+      "git add app.py",
+      "git commit -m \"Fix a bug\"",
+      "git merge feature",
+      "echo 'print(\"hello\")' > app.py",
+      "echo 'print(\"main was here\")' >> app.py",
+      "echo 'print(\"shipped\")' >> app.py",
+      "echo 'print(\"hotfix\")' >> app.py",
+      "git add app.py",
+      "git merge --continue",
     ],
     "chmod-permissions": [
       "ls -l scripts/backup.sh",

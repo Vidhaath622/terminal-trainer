@@ -222,9 +222,9 @@ export const COMMAND_REFERENCE: CommandEntry[] = [
   {
     name: "git",
     category: "Git",
-    summary: "Version control: set your identity, make a repository, stage files, commit.",
+    summary: "Version control: set your identity, make a repository, stage files, commit, branch and merge.",
     example: "git init",
-    exampleNote: "Turns the current folder into a repository (a hidden .git/ entry appears). Then: git add <file> stages it, git commit -m \"msg\" records it, git log shows history. Configure identity first: git config --global user.name \"Your Name\".",
+    exampleNote: "Turns the current folder into a repository (a hidden .git/ entry appears). Then: git add <file> stages it, git commit -m \"msg\" records it, git log shows history. Branch with git branch <name>, move with git switch <branch>, and join work back with git merge <branch>. Configure identity first: git config --global user.name \"Your Name\".",
   },
 
   // --- Operators ----------------------------------------------------------

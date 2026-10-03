@@ -22,7 +22,7 @@ npm run build      # production build
 | Virtual filesystem | `src/engine/vfs.ts` | Dirs/files with modes, owners, snapshots |
 | Shell parser | `src/engine/parser.ts` | Quotes, escapes, pipes, `>` `>>` |
 | Commands | `src/engine/commands/` | 27 commands incl. grep/find/chmod/tree and simulated git |
-| Problems & checks | `src/engine/schema.ts` | Zod schema, 15 check types, marks invariant |
+| Problems & checks | `src/engine/schema.ts` | Zod schema, 17 check types, marks invariant |
 | Grader | `src/engine/grader.ts` | Per-check pass/fail + human messages |
 | Session | `src/engine/session.ts` | Auto-grading, events, reset, persistence |
 | Launch problems | `src/problems/launch.ts` | 30 problems incl. a 10-problem Git track, each with a tested solution |

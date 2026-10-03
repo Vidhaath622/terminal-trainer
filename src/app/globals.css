@@ -57,3 +57,25 @@ body {
   line-height: 1.7;
   max-width: 70ch;
 }
+
+/* Continuous cursor blink. xterm only animates the cursor while the terminal
+   itself is focused, so an untouched terminal would sit there as a steady
+   cursor and look dead — TerminalView initializes the cursor (see the
+   alternate-screen round-trip there), and this keeps it blinking from then on.
+   Opacity, not background-color: xterm pins the unfocused cursor's colors with
+   !important, which an animation can never outrank. When the terminal is
+   focused xterm's own blink rule wins at the same 1s step-end phase, so the
+   blink stays seamless across focus changes. */
+.xterm .xterm-cursor {
+  animation: tt-cursor-blink 1s step-end infinite;
+}
+@keyframes tt-cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .xterm .xterm-cursor {
+    animation: none;
+  }
+}

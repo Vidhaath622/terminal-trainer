@@ -33,6 +33,29 @@ export interface GradeResult {
   results: CheckResult[];
 }
 
+/**
+ * The repository's .git metadata for the current directory (walking up like
+ * git's own discovery), or null when there is no repo. Only the fields the
+ * branch checks need are typed; the file itself is engine-shaped JSON.
+ */
+function readGitMeta(vfs: Vfs): { branch: string; branches?: Record<string, string> } | null {
+  let dir = vfs.cwd;
+  for (;;) {
+    const dot = dir === "/" ? "/.git" : dir + "/.git";
+    if (vfs.isFile(dot)) {
+      try {
+        const meta = JSON.parse(vfs.readFile(dot));
+        if (meta && meta.version === 1) return meta;
+      } catch {
+        /* unreadable .git: treat as no repository */
+      }
+      return null;
+    }
+    if (dir === "/") return null;
+    dir = dir.slice(0, dir.lastIndexOf("/")) || "/";
+  }
+}
+
 export function evaluateCheck(check: Check, input: GradeInput): CheckResult {
   const { vfs } = input;
   const pass = (message: string): CheckResult => ({ check, passed: true, marks: check.marks, message });
@@ -127,6 +150,22 @@ export function evaluateCheck(check: Check, input: GradeInput): CheckResult {
       return vfs.cwd === check.path
         ? pass(`working directory is ${check.path}`)
         : fail(`working directory is ${vfs.cwd}, expected ${check.path}`);
+    }
+    case "branchExists": {
+      const meta = readGitMeta(vfs);
+      if (!meta) return fail("not a git repository");
+      // Repos written before the branch map existed have one implicit branch.
+      const tips: Record<string, unknown> = meta.branches ?? { [meta.branch]: true };
+      return check.branch in tips
+        ? pass(`branch exists: ${check.branch}`)
+        : fail(`no branch named '${check.branch}'`);
+    }
+    case "onBranch": {
+      const meta = readGitMeta(vfs);
+      if (!meta) return fail("not a git repository");
+      return meta.branch === check.branch
+        ? pass(`on branch ${check.branch}`)
+        : fail(`on branch '${meta.branch}', expected '${check.branch}'`);
     }
     case "commandUsedWithFlag": {
       const used = input.stepCommands.some((cmd) => {

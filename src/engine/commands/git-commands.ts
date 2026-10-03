@@ -3,8 +3,11 @@
  * (+ help / -h). Pure TypeScript - no UI imports.
  *
  * Scope: the first-commit workflow plus the inspection and cleanup verbs a
- * beginner meets next (history flags, diffs, untracking, renames). No
- * remotes, no branch switching. Repository state lives in a `.git` file at
+ * beginner meets next (history flags, diffs, untracking, renames), extended
+ * with local branches: `branch`, `switch` (and the older `checkout` spelling)
+ * and `merge` — fast-forwards, merge commits, and simulated conflicts with
+ * `--continue` / `--abort`. No remotes, so `git branch -a` only ever lists
+ * local branches. Repository state lives in a `.git` file at
  * the repository root (JSON-serialized), so it flows through the existing
  * VFS (and therefore session persistence) for free. Global config lives in
  * ~/.gitconfig, shared across repositories like the real thing.
@@ -25,11 +28,37 @@ interface GitCommit {
   email: string;
   /** Full tree snapshot: repo-relative path -> content at commit time. */
   files: Record<string, string>;
+  /**
+   * Parent commit ids (two for a merge commit). Optional: repos written
+   * before branches existed are linear, so the previous array entry is the
+   * parent — see parentsOf().
+   */
+  parents?: string[];
+}
+
+/** An in-progress conflicted merge (real git's MERGE_HEAD state). */
+interface MergeState {
+  /** branch being merged into (the one you are standing on) */
+  ours: string;
+  /** branch being merged */
+  theirs: string;
+  /** common ancestor commit id, null when the two sides share no history */
+  base: string | null;
+  /** commit message to use once the conflicts are resolved */
+  message: string;
+  /** paths that stopped with conflict markers in the working tree */
+  conflicted: string[];
 }
 
 interface GitMeta {
   version: number;
   branch: string;
+  /** name -> tip commit id ("" = branch with no commits). Absent on older repos. */
+  branches?: Record<string, string>;
+  /** what `git switch -` jumps back to */
+  previousBranch?: string;
+  /** set while a conflicted merge waits for --continue / --abort */
+  merge?: MergeState;
   commits: GitCommit[];
   staged: Record<string, string>;
   /** Paths staged for deletion (git rm / rm --cached); optional for older repos. */
@@ -52,6 +81,10 @@ const USAGE = `usage: git <command> [<args>]
    diff     compare the working tree, the staging area or two commits
    rm       delete a file and stage the deletion (--cached keeps it on disk)
    mv       rename or move a tracked file
+   branch   list, create, delete or rename branches
+   switch   move to another branch (-c creates it, - jumps back)
+   checkout older spelling of switch (branch forms only)
+   merge    bring another branch into this one (--no-ff, --continue, --abort)
 
 'git help <command>' explains one command.`;
 
@@ -152,6 +185,60 @@ USAGE
 DESCRIPTION
   Moves the file on disk and keeps it tracked. The simulator records a
   rename as a deletion plus an addition in the next commit.`,
+  branch: `git branch - list, create, delete or rename branches
+
+USAGE
+  git branch                 list local branches (* marks the one you are on)
+  git branch -v              also show each branch's last commit
+  git branch -a              list every branch (this simulator has no remotes)
+  git branch <name>          create a branch here, without switching to it
+  git branch -d <name>       delete a branch that is fully merged (safe)
+  git branch -D <name>       delete it even when it is not merged
+  git branch -m <old> <new>  rename a branch
+
+DESCRIPTION
+  A branch is a name pointing at a commit. Creating one records where you
+  are now; the name only moves when commits land on it. -d refuses to lose
+  work: it deletes only when the branch's commits are already reachable
+  from where you are standing.`,
+  switch: `git switch - move to another branch
+
+USAGE
+  git switch <branch>        move to an existing branch
+  git switch -c <new-branch> create it and move onto it in one step
+  git switch -               jump back to the branch you were on before
+
+DESCRIPTION
+  The branch you are standing on is the one that moves. The working tree is
+  replaced with the target branch's files, so switch refuses while
+  uncommitted changes would be lost — commit first. checkout <branch> and
+  checkout -b <new-branch> are the older spellings of the same moves.`,
+  checkout: `git checkout - older spelling of git switch
+
+USAGE
+  git checkout <branch>        move to an existing branch
+  git checkout -b <new-branch> create it and move onto it
+  git checkout -               jump back to the previous branch
+
+DESCRIPTION
+  Same effect as git switch for branches; git switch just says what it
+  does. Restoring a single file (git checkout -- <file>) is not simulated.`,
+  merge: `git merge - bring another branch into the one you are on
+
+USAGE
+  git merge <branch>          merge <branch> INTO the branch you are on
+  git merge --no-ff <branch>  always write a merge commit
+  git merge --continue        finish after resolving conflicts
+  git merge --abort           cancel the merge and restore the working tree
+
+DESCRIPTION
+  Check git status first: the branch you are standing on is the one that
+  moves. When the other branch is strictly ahead Git fast-forwards (moves
+  the name) unless --no-ff forces a merge commit. Diverged histories get a
+  merge commit joining both lines. Files both sides changed differently
+  stop with conflict markers (<<<<<<< HEAD ... ======= ... >>>>>>>) in the
+  working tree: edit them, then run git merge --continue (it stages the
+  resolution), or give up with git merge --abort.`,
 };
 
 // ---------- config storage ----------
@@ -211,25 +298,168 @@ function deletionsOf(meta: GitMeta): string[] {
   return meta.stagedDeletions ?? [];
 }
 
+// ---------- history and branch helpers ----------
+
+function commitIndex(meta: GitMeta, id: string): number {
+  return meta.commits.findIndex((c) => c.id === id);
+}
+
+function commitById(meta: GitMeta, id: string): GitCommit | null {
+  const i = commitIndex(meta, id);
+  return i >= 0 ? meta.commits[i] : null;
+}
+
+/** name -> tip commit id. Legacy repos predate the map: one implicit branch. */
+function branchTips(meta: GitMeta): Record<string, string> {
+  if (meta.branches) return meta.branches;
+  const last = meta.commits[meta.commits.length - 1];
+  return { [meta.branch]: last ? last.id : "" };
+}
+
+/** Same as branchTips, but materialises the map so callers can write to it. */
+function mutableBranchTips(meta: GitMeta): Record<string, string> {
+  if (!meta.branches) meta.branches = { ...branchTips(meta) };
+  return meta.branches;
+}
+
+function tipOf(meta: GitMeta, branch: string): string {
+  return branchTips(meta)[branch] ?? "";
+}
+
+/** Parent ids. Commits written before branches existed are linear. */
+function parentsOf(meta: GitMeta, c: GitCommit): string[] {
+  if (c.parents) return c.parents;
+  const i = commitIndex(meta, c.id);
+  return i > 0 ? [meta.commits[i - 1].id] : [];
+}
+
+/** The commit HEAD points at: the tip of the current branch. */
+function headCommit(meta: GitMeta): GitCommit | null {
+  const id = tipOf(meta, meta.branch);
+  return id ? commitById(meta, id) : null;
+}
+
 function headFiles(meta: GitMeta): Record<string, string> {
-  return meta.commits.length > 0 ? meta.commits[meta.commits.length - 1].files : {};
+  return headCommit(meta)?.files ?? {};
+}
+
+/** Every commit reachable from the given tips, following parent links. */
+function reachable(meta: GitMeta, tips: string[]): GitCommit[] {
+  const seen = new Set<string>();
+  const out: GitCommit[] = [];
+  const stack = tips.filter((t) => t.length > 0);
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (seen.has(id)) continue;
+    const c = commitById(meta, id);
+    if (!c) continue;
+    seen.add(id);
+    out.push(c);
+    for (const p of parentsOf(meta, c)) stack.push(p);
+  }
+  return out;
+}
+
+/** Newest first — commit time, then creation order. This is git log's order. */
+function byRecency(meta: GitMeta, list: GitCommit[]): GitCommit[] {
+  return [...list].sort((a, b) => b.time - a.time || commitIndex(meta, b.id) - commitIndex(meta, a.id));
+}
+
+/** Is `ancestor` reachable from `descendant`? Used by merge and branch -d. */
+function isAncestor(meta: GitMeta, ancestor: string, descendant: string): boolean {
+  if (!ancestor) return false;
+  return reachable(meta, [descendant]).some((c) => c.id === ancestor);
+}
+
+/** Nearest commit both sides descend from (fewest hops), or null. */
+function commonAncestor(meta: GitMeta, a: string, b: string): string | null {
+  const depths = new Map<string, number>();
+  const fromA: Array<[string, number]> = [[a, 0]];
+  while (fromA.length > 0) {
+    const [id, d] = fromA.shift()!;
+    if (depths.has(id)) continue;
+    depths.set(id, d);
+    const c = commitById(meta, id);
+    if (c) for (const p of parentsOf(meta, c)) fromA.push([p, d + 1]);
+  }
+  let best: string | null = null;
+  let bestSum = Infinity;
+  const fromB: Array<[string, number]> = [[b, 0]];
+  const seen = new Set<string>();
+  while (fromB.length > 0) {
+    const [id, d] = fromB.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const da = depths.get(id);
+    if (da !== undefined && da + d < bestSum) {
+      bestSum = da + d;
+      best = id;
+    }
+    const c = commitById(meta, id);
+    if (c) for (const p of parentsOf(meta, c)) fromB.push([p, d + 1]);
+  }
+  return best;
+}
+
+/** Tracked files whose working copy differs from the index. Untracked files are free to move. */
+function dirtyPaths(ctx: ShellContext, root: string, meta: GitMeta): string[] {
+  const head = headFiles(meta);
+  const out = new Set<string>();
+  for (const rel of Object.keys(meta.staged)) {
+    if (meta.staged[rel] !== head[rel]) out.add(rel);
+  }
+  for (const rel of deletionsOf(meta)) out.add(rel);
+  for (const rel of meta.tracked) {
+    const abs = absPath(root, rel);
+    const work = ctx.vfs.isFile(abs) ? ctx.vfs.readFile(abs) : null;
+    const index = rel in meta.staged ? meta.staged[rel] : head[rel] ?? null;
+    if (work !== index) out.add(rel);
+  }
+  return [...out].sort();
+}
+
+/** Replace the working tree with `files` and reset the index (checkout/merge). */
+function checkoutFiles(ctx: ShellContext, root: string, meta: GitMeta, files: Record<string, string>): void {
+  const keep = new Set(Object.keys(files));
+  for (const rel of meta.tracked) {
+    if (keep.has(rel)) continue;
+    const abs = absPath(root, rel);
+    if (ctx.vfs.isFile(abs)) ctx.vfs.remove(abs, false);
+  }
+  for (const [rel, content] of Object.entries(files)) {
+    const abs = absPath(root, rel);
+    const dir = ctx.vfs.parentOf(abs);
+    if (!ctx.vfs.isDir(dir)) ctx.vfs.ensureDir(dir);
+    ctx.vfs.writeFile(abs, content);
+  }
+  meta.tracked = Object.keys(files);
+  meta.staged = {};
+  meta.stagedDeletions = [];
 }
 
 function sortedKeys(rec: Record<string, string>): string[] {
   return Object.keys(rec).sort();
 }
 
-/** HEAD, HEAD~<n>, or an id prefix. */
+/** HEAD (the current branch's tip), HEAD~<n> along first parents, or an id prefix. */
 function resolveCommit(meta: GitMeta, ref: string): { commit: GitCommit; index: number } | null {
   if (ref === "HEAD") {
-    return meta.commits.length > 0
-      ? { commit: meta.commits[meta.commits.length - 1], index: meta.commits.length - 1 }
-      : null;
+    const head = headCommit(meta);
+    return head ? { commit: head, index: commitIndex(meta, head.id) } : null;
   }
   const tilde = ref.match(/^HEAD~(\d+)$/);
   if (tilde) {
-    const index = meta.commits.length - 1 - parseInt(tilde[1], 10);
-    return index >= 0 ? { commit: meta.commits[index], index } : null;
+    const start = headCommit(meta);
+    if (!start) return null;
+    let current: GitCommit = start;
+    const n = parseInt(tilde[1], 10);
+    for (let i = 0; i < n; i++) {
+      const parentId = parentsOf(meta, current)[0];
+      const next = parentId ? commitById(meta, parentId) : null;
+      if (!next) return null;
+      current = next;
+    }
+    return { commit: current, index: commitIndex(meta, current.id) };
   }
   const index = meta.commits.findIndex((c) => c.id.startsWith(ref));
   return index >= 0 ? { commit: meta.commits[index], index } : null;
@@ -314,8 +544,9 @@ function gitDate(ms: number): string {
   );
 }
 
-function commitHeader(c: GitCommit): string {
-  return `commit ${c.id}\nAuthor: ${c.author} <${c.email}>\nDate:   ${gitDate(c.time)}\n\n    ${c.message}`;
+function commitHeader(c: GitCommit, parents: string[] = []): string {
+  const merge = parents.length > 1 ? `Merge: ${parents.join(" ")}\n` : "";
+  return `commit ${c.id}\n${merge}Author: ${c.author} <${c.email}>\nDate:   ${gitDate(c.time)}\n\n    ${c.message}`;
 }
 
 // ---------- subcommands ----------
@@ -402,11 +633,17 @@ function gitStatus(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
   const short = args.includes("-s") || args.includes("--short");
   const head = headFiles(meta);
   const deletions = deletionsOf(meta);
+  // Paths still carrying conflict markers belong to a merge in progress.
+  const conflicted = (meta.merge?.conflicted ?? []).filter((rel) => {
+    const abs = absPath(root, rel);
+    return ctx.vfs.isFile(abs) && ctx.vfs.readFile(abs).includes("<<<<<<<");
+  });
 
   const stagedKeys = sortedKeys(meta.staged);
   const modified: string[] = [];
   const deleted: string[] = [];
   for (const rel of meta.tracked) {
+    if (conflicted.includes(rel)) continue;
     const abs = absPath(root, rel);
     if (!ctx.vfs.isFile(abs)) deleted.push(rel);
     else {
@@ -433,6 +670,12 @@ function gitStatus(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
       const y = deletions.includes(rel) ? " " : work === null ? "D" : work !== indexContent ? "M" : " ";
       if (x !== " " || y !== " ") rows.push({ x, y, path: rel });
     }
+    for (const rel of conflicted) {
+      const row = { x: "U", y: "U", path: rel };
+      const i = rows.findIndex((r) => r.path === rel);
+      if (i >= 0) rows[i] = row;
+      else rows.push(row);
+    }
     for (const rel of untracked) rows.push({ x: "?", y: "?", path: rel });
     rows.sort((p, q) => p.path.localeCompare(q.path));
     return ok(rows.map((r) => `${r.x}${r.y} ${r.path}`).join("\n") + (rows.length > 0 ? "\n" : ""));
@@ -440,6 +683,14 @@ function gitStatus(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
 
   const lines: string[] = [`On branch ${meta.branch}`];
   if (meta.commits.length === 0) lines.push("No commits yet");
+  if (conflicted.length > 0) {
+    lines.push("You have unmerged paths.");
+    lines.push('  (fix the conflicts, then run "git merge --continue")');
+    lines.push("");
+    lines.push("Unmerged paths:");
+    for (const rel of conflicted) lines.push(`        both modified:   ${rel}`);
+    lines.push("");
+  }
 
   if (stagedKeys.length > 0 || deletions.length > 0) {
     lines.push("Changes to be committed:");
@@ -460,7 +711,9 @@ function gitStatus(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
   }
 
   const nothingStaged = stagedKeys.length === 0 && deletions.length === 0;
-  if (nothingStaged && modified.length === 0 && deleted.length === 0 && untracked.length === 0) {
+  if (conflicted.length > 0) {
+    lines.push('nothing added to commit (use "git add" and/or "git commit -a")');
+  } else if (nothingStaged && modified.length === 0 && deleted.length === 0 && untracked.length === 0) {
     lines.push("nothing to commit, working tree clean");
   } else if (nothingStaged) {
     lines.push('nothing added to commit but untracked files present (use "git add" to track)');
@@ -551,6 +804,7 @@ function gitCommit(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
     return fail("nothing to commit (stage files with git add first)");
   }
 
+  const parentCommit = headCommit(meta);
   const global = readGlobalConfig(ctx);
   const now = ctx.now().getTime();
   const files: Record<string, string> = { ...head };
@@ -563,18 +817,22 @@ function gitCommit(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
     author: global["user.name"] ?? ctx.user,
     email: global["user.email"] ?? `${ctx.user}@trainer.local`,
     files,
+    parents: parentCommit ? [parentCommit.id] : [],
   };
   meta.commits.push(commit);
+  // The current branch (materialised for repos created before branches) now
+  // points at this commit; other branches stay where they were.
+  mutableBranchTips(meta)[meta.branch] = commit.id;
   meta.staged = {};
   meta.stagedDeletions = [];
   meta.tracked = meta.tracked.filter((rel) => rel in files);
   saveRepo(ctx, root, meta);
 
   const changed = stagedKeys.length + deletions.length;
-  const isRoot = meta.commits.length === 1;
+  const isRoot = !parentCommit;
   const lines = [`[${meta.branch}${isRoot ? " (root-commit)" : ""} ${commit.id}] ${message}`];
   lines.push(` ${changed} file${changed === 1 ? "" : "s"} changed`);
-  const parentFiles = meta.commits.length > 1 ? meta.commits[meta.commits.length - 2].files : {};
+  const parentFiles = parentCommit ? parentCommit.files : {};
   for (const rel of stagedKeys) {
     if (!(rel in parentFiles)) lines.push(` create mode 100644 ${rel}`);
   }
@@ -595,12 +853,16 @@ function gitLog(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
   let oneline = false;
   let stat = false;
   let patch = false;
+  let all = false;
+  let graph = false;
   let limit: number | null = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--oneline") oneline = true;
     else if (a === "--stat") stat = true;
     else if (a === "-p" || a === "--patch") patch = true;
+    else if (a === "--all") all = true;
+    else if (a === "--graph") graph = true;
     else if (a === "-n") {
       const n = Number(args[++i]);
       if (!Number.isInteger(n) || n < 0) return fail("fatal: invalid number of commits");
@@ -612,21 +874,33 @@ function gitLog(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
     }
   }
 
-  const shown = limit === null ? meta.commits : meta.commits.slice(meta.commits.length - limit);
+  // History = everything reachable from the current branch's tip (or from
+  // every branch tip with --all), newest first. Merges pull in both parents.
+  const tips = all
+    ? [...new Set(Object.values(branchTips(meta)).filter((t) => t.length > 0))]
+    : [tipOf(meta, meta.branch)];
+  const pool = byRecency(meta, reachable(meta, tips));
+  if (pool.length === 0) {
+    return fail(`fatal: your current branch '${meta.branch}' does not have any commits yet`, 128);
+  }
+  const shown = limit === null ? pool : pool.slice(0, limit);
+  const prefixes = graph ? graphPrefixes(meta, shown) : null;
+
   const blocks: string[] = [];
-  for (let k = shown.length - 1; k >= 0; k--) {
-    const globalIndex = meta.commits.length - shown.length + k;
-    const c = meta.commits[globalIndex];
-    const parent = globalIndex > 0 ? meta.commits[globalIndex - 1] : null;
+  for (let k = 0; k < shown.length; k++) {
+    const c = shown[k];
+    const parents = parentsOf(meta, c);
+    const parentTree = parents[0] ? commitById(meta, parents[0])?.files ?? {} : {};
+    const prefix = prefixes ? prefixes[k] : "";
     if (oneline) {
-      let line = `${c.id} ${c.message}`;
-      if (stat) line += "\n" + statBlock(parent?.files ?? {}, c.files);
+      let line = `${prefix}${c.id} ${c.message}`;
+      if (stat) line += "\n" + statBlock(parentTree, c.files);
       blocks.push(line);
       continue;
     }
-    let block = commitHeader(c);
-    if (stat) block += "\n\n" + statBlock(parent?.files ?? {}, c.files);
-    if (patch) block += "\n\n" + treePatch(parent?.files ?? {}, c.files);
+    let block = prefix + commitHeader(c, parents);
+    if (stat) block += "\n\n" + statBlock(parentTree, c.files);
+    if (patch) block += "\n\n" + treePatch(parentTree, c.files);
     blocks.push(block);
   }
   // Plain --oneline lines sit tight together; richer entries get blank lines.
@@ -650,8 +924,9 @@ function gitShow(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
   const found = resolveCommit(meta, ref);
   if (!found) return fail(`fatal: ambiguous argument '${ref}': unknown revision`);
 
-  const parent = found.index > 0 ? meta.commits[found.index - 1] : null;
-  let out = commitHeader(found.commit);
+  const parents = parentsOf(meta, found.commit);
+  const parent = parents[0] ? commitById(meta, parents[0]) : null;
+  let out = commitHeader(found.commit, parents);
   if (flags.includes("--stat")) out += "\n\n" + statBlock(parent?.files ?? {}, found.commit.files);
   out += "\n\n" + treePatch(parent?.files ?? {}, found.commit.files);
   return ok(out + "\n");
@@ -785,6 +1060,416 @@ function gitMv(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
   return ok();
 }
 
+// ---------- graph rendering ----------
+
+/**
+ * Column markers for `git log --graph`: one cell per column, `*` on the
+ * commit itself, `|` on columns that still have commits to print, blank
+ * otherwise. A merge opens a column to the right of its line. Simplified
+ * layout: the edge lines git draws (`|\`, `|/`) are omitted.
+ */
+function graphPrefixes(meta: GitMeta, ordered: GitCommit[]): string[] {
+  const columns: Array<string | null> = [];
+  const out: string[] = [];
+  for (const c of ordered) {
+    let col = columns.indexOf(c.id);
+    if (col === -1) {
+      col = columns.indexOf(null);
+      if (col === -1) {
+        columns.push(null);
+        col = columns.length - 1;
+      }
+      columns[col] = c.id;
+    }
+    // The commit closes its line in every other column.
+    for (let j = 0; j < columns.length; j++) {
+      if (j !== col && columns[j] === c.id) columns[j] = null;
+    }
+    out.push(columns.map((id, j) => (j === col ? "*" : id ? "|" : " ")).join(" ") + " ");
+    const parents = parentsOf(meta, c);
+    columns[col] = parents[0] ?? null;
+    if (parents.length > 1) columns.splice(col + 1, 0, parents[1]);
+  }
+  return out;
+}
+
+// ---------- branches, switching, merging ----------
+
+const BRANCH_NAME_RE = /^[\w][\w./-]*$/;
+
+function gitBranch(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+  const tips = mutableBranchTips(meta);
+
+  let showLast = false;
+  let mode: "list" | "delete" | "force-delete" | "rename" = "list";
+  const positional: string[] = [];
+  for (const a of args) {
+    if (a === "-v" || a === "-vv" || a === "--verbose") showLast = true;
+    else if (a === "-a" || a === "--all") {
+      // No remotes in the simulator: -a lists exactly the local branches.
+    } else if (a === "-d" || a === "--delete") mode = "delete";
+    else if (a === "-D" || a === "--force-delete") mode = "force-delete";
+    else if (a === "-m" || a === "--move") mode = "rename";
+    else if (a.startsWith("-")) return fail(`git branch: unknown option '${a}'`);
+    else positional.push(a);
+  }
+
+  if (mode === "rename") {
+    const oldName = positional.length === 1 ? meta.branch : positional[0];
+    const newName = positional.length === 1 ? positional[0] : positional[1];
+    if (!oldName || !newName) return fail("usage: git branch -m [<old>] <new>");
+    if (!(oldName in tips)) return fail(`error: branch '${oldName}' not found`, 1);
+    if (newName in tips) return fail(`fatal: a branch named '${newName}' already exists`, 1);
+    if (!BRANCH_NAME_RE.test(newName)) return fail(`fatal: '${newName}' is not a valid branch name`, 1);
+    tips[newName] = tips[oldName];
+    delete tips[oldName];
+    if (meta.branch === oldName) meta.branch = newName;
+    if (meta.previousBranch === oldName) meta.previousBranch = newName;
+    saveRepo(ctx, root, meta);
+    return ok();
+  }
+
+  if (mode === "delete" || mode === "force-delete") {
+    const name = positional[0];
+    if (!name) return fail(`usage: git branch -${mode === "delete" ? "d" : "D"} <branch>`);
+    if (!(name in tips)) return fail(`error: branch '${name}' not found`, 1);
+    if (name === meta.branch) return fail(`fatal: Cannot delete branch '${name}' checked out`, 1);
+    const tip = tips[name];
+    if (mode === "delete" && tip && !isAncestor(meta, tip, tipOf(meta, meta.branch))) {
+      return fail(`error: The branch '${name}' is not fully merged.\n  (use git branch -D ${name} to force)`, 1);
+    }
+    delete tips[name];
+    if (meta.previousBranch === name) delete meta.previousBranch;
+    saveRepo(ctx, root, meta);
+    return ok(tip ? `Deleted branch ${name} (was ${tip}).\n` : `Deleted branch ${name} (was never started).\n`);
+  }
+
+  if (positional.length > 1) return fail("usage: git branch [<name> | -d <name> | -m <old> <new>]");
+
+  if (positional.length === 1) {
+    const name = positional[0];
+    if (!BRANCH_NAME_RE.test(name)) return fail(`fatal: '${name}' is not a valid branch name`, 1);
+    if (name in tips) return fail(`fatal: a branch named '${name}' already exists`, 1);
+    // A branch is just a name pointing where HEAD points right now.
+    tips[name] = tipOf(meta, meta.branch);
+    saveRepo(ctx, root, meta);
+    return ok();
+  }
+
+  const names = Object.keys(tips).sort();
+  const lines = names.map((name) => {
+    const tip = tips[name];
+    const marker = name === meta.branch ? "* " : "  ";
+    if (!showLast || !tip) return `${marker}${name}`;
+    const c = commitById(meta, tip);
+    return `${marker}${name}  ${tip} ${c ? c.message : ""}`.trimEnd();
+  });
+  return ok(lines.length > 0 ? lines.join("\n") + "\n" : "");
+}
+
+function gitSwitch(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  return switchBranch(ctx, args, ["-c", "--create"]);
+}
+
+function gitCheckout(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  return switchBranch(ctx, args, ["-b", "--branch"]);
+}
+
+/** Shared body of git switch and git checkout's branch forms. */
+function switchBranch(ctx: ShellContext, args: string[], createFlags: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+  if (meta.merge) {
+    return fail(
+      "fatal: You have not concluded your merge (MERGE_HEAD exists).\nPlease, commit your changes or run git merge --abort first.",
+      128
+    );
+  }
+
+  let create: string | null = null;
+  let back = false;
+  const positional: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--") continue;
+    if (createFlags.includes(a)) {
+      create = args[i + 1] ?? "";
+      i++;
+      continue;
+    }
+    if (createFlags.some((f) => a.startsWith(f + "="))) {
+      create = a.slice(a.indexOf("=") + 1);
+      continue;
+    }
+    if (a === "-") {
+      back = true;
+      continue;
+    }
+    if (a.startsWith("-")) return fail(`git switch: unknown option '${a}'`);
+    positional.push(a);
+  }
+
+  const tips = mutableBranchTips(meta);
+  let target: string;
+  let created = false;
+  if (create !== null) {
+    if (!BRANCH_NAME_RE.test(create)) return fail(`fatal: '${create}' is not a valid branch name`, 128);
+    if (create in tips) return fail(`fatal: a branch named '${create}' already exists`, 128);
+    tips[create] = tipOf(meta, meta.branch);
+    target = create;
+    created = true;
+  } else if (back) {
+    if (!meta.previousBranch || !(meta.previousBranch in tips)) return fail("fatal: no previous branch", 128);
+    target = meta.previousBranch;
+  } else if (positional.length === 1) {
+    target = positional[0];
+  } else {
+    return fail("usage: git switch [-c <new-branch>] <branch> | git switch -", 128);
+  }
+
+  if (!(target in tips)) {
+    if (created) delete tips[target];
+    return fail(`fatal: invalid reference: ${target}`, 128);
+  }
+  if (target === meta.branch) {
+    if (created) saveRepo(ctx, root, meta);
+    return ok(`Already on '${meta.branch}'\n`);
+  }
+
+  const sameCommit = tips[target] === tipOf(meta, meta.branch);
+  if (!sameCommit) {
+    const dirty = dirtyPaths(ctx, root, meta);
+    if (dirty.length > 0) {
+      return fail(
+        `error: Your local changes to the following files would be overwritten by switch:\n` +
+          dirty.map((f) => `\t${f}`).join("\n") +
+          `\nPlease commit your changes or stash them before you switch.\nAborting`,
+        1
+      );
+    }
+    const tip = tips[target];
+    const tipCommit = tip ? commitById(meta, tip) : null;
+    checkoutFiles(ctx, root, meta, tipCommit ? { ...tipCommit.files } : {});
+  }
+
+  const from = meta.branch;
+  meta.branch = target;
+  meta.previousBranch = from;
+  saveRepo(ctx, root, meta);
+  if (created) return ok(`Switched to a new branch '${target}'\n`);
+  return ok(`Switched to branch '${target}'\n`);
+}
+
+/** Three-way merge of two full trees over a common base. */
+function mergeTrees(
+  base: Record<string, string>,
+  ours: Record<string, string>,
+  theirs: Record<string, string>,
+  theirLabel: string
+): { files: Record<string, string>; conflicted: string[] } {
+  const paths = [...new Set([...Object.keys(base), ...Object.keys(ours), ...Object.keys(theirs)])].sort();
+  const files: Record<string, string> = {};
+  const conflicted: string[] = [];
+  for (const p of paths) {
+    const b = base[p] ?? null;
+    const o = ours[p] ?? null;
+    const t = theirs[p] ?? null;
+    let value: string | null;
+    if (o === null && t === null) value = null; // deleted on both sides
+    else if (o === t) value = o; // same content (both changed alike, or neither)
+    else if (b === o) value = t; // only theirs changed
+    else if (b === t) value = o; // only ours changed
+    else {
+      // Both sides changed it differently — keep both, marked up.
+      value = conflictMarkers(o ?? "", t ?? "", theirLabel);
+      conflicted.push(p);
+    }
+    if (value !== null) files[p] = value;
+  }
+  return { files, conflicted };
+}
+
+function conflictMarkers(ours: string, theirs: string, theirLabel: string): string {
+  const block = (s: string) => (s === "" || s.endsWith("\n") ? s : s + "\n");
+  return `<<<<<<< HEAD\n${block(ours)}=======\n${block(theirs)}>>>>>>> ${theirLabel}\n`;
+}
+
+function createMergeCommit(
+  ctx: ShellContext,
+  meta: GitMeta,
+  message: string,
+  files: Record<string, string>,
+  parents: string[]
+): GitCommit {
+  const global = readGlobalConfig(ctx);
+  const now = ctx.now().getTime();
+  const commit: GitCommit = {
+    id: shortHash(`${now}|${message}|${parents.join("|")}|${meta.commits.length}`),
+    message,
+    time: now,
+    author: global["user.name"] ?? ctx.user,
+    email: global["user.email"] ?? `${ctx.user}@trainer.local`,
+    files,
+    parents,
+  };
+  meta.commits.push(commit);
+  mutableBranchTips(meta)[meta.branch] = commit.id;
+  return commit;
+}
+
+/** git merge --continue: the working tree now holds the resolutions. */
+function finishMerge(
+  ctx: ShellContext,
+  root: string,
+  meta: GitMeta,
+  tips: Record<string, string>
+): ReturnType<CommandImpl> {
+  const st = meta.merge;
+  if (!st) return fail("error: There is no merge to continue (MERGE_HEAD missing).");
+
+  const leftover = st.conflicted.filter((rel) => {
+    const abs = absPath(root, rel);
+    return ctx.vfs.isFile(abs) && ctx.vfs.readFile(abs).includes("<<<<<<<");
+  });
+  if (leftover.length > 0) {
+    return fail(
+      `error: you still have conflict markers in:\n` +
+        leftover.map((f) => `  ${f}`).join("\n") +
+        `\nEdit the file, then run git merge --continue (or git merge --abort to cancel).`
+    );
+  }
+
+  const ourCommit = commitById(meta, tipOf(meta, st.ours));
+  const theirCommit = commitById(meta, tips[st.theirs] ?? "");
+  if (!ourCommit || !theirCommit) return fail("error: the branches being merged no longer exist");
+
+  const baseFiles = st.base ? commitById(meta, st.base)?.files ?? {} : {};
+  const { files } = mergeTrees(baseFiles, ourCommit.files, theirCommit.files, st.theirs);
+  // Whatever the student left in the working tree is the resolution.
+  for (const rel of st.conflicted) {
+    const abs = absPath(root, rel);
+    if (ctx.vfs.isFile(abs)) files[rel] = ctx.vfs.readFile(abs);
+    else delete files[rel];
+  }
+
+  const commit = createMergeCommit(ctx, meta, st.message, files, [ourCommit.id, theirCommit.id]);
+  checkoutFiles(ctx, root, meta, files);
+  delete meta.merge;
+  saveRepo(ctx, root, meta);
+
+  const changed =
+    Object.keys(files).filter((rel) => ourCommit.files[rel] !== files[rel]).length +
+    Object.keys(ourCommit.files).filter((rel) => !(rel in files)).length;
+  return ok(`[${meta.branch} ${commit.id}] ${st.message}\n ${changed} file${changed === 1 ? "" : "s"} changed\n`);
+}
+
+function gitMerge(ctx: ShellContext, args: string[]): ReturnType<CommandImpl> {
+  const repo = findRepo(ctx);
+  if (!repo) return fail(NOT_A_REPO, 128);
+  const { root, meta } = repo;
+  const tips = mutableBranchTips(meta);
+
+  let noFf = false;
+  let cont = false;
+  let abort = false;
+  let message: string | null = null;
+  const positional: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--no-ff") noFf = true;
+    else if (a === "--continue") cont = true;
+    else if (a === "--abort") abort = true;
+    else if (a === "-m" || a === "--message") message = args[++i] ?? "";
+    else if (a.startsWith("--message=")) message = a.slice("--message=".length);
+    else if (a.startsWith("-")) return fail(`git merge: unknown option '${a}'`);
+    else positional.push(a);
+  }
+
+  if (abort) {
+    const st = meta.merge;
+    if (!st) return fail("error: There is no merge to abort (MERGE_HEAD missing).");
+    const ours = commitById(meta, tipOf(meta, st.ours));
+    checkoutFiles(ctx, root, meta, ours ? { ...ours.files } : {});
+    delete meta.merge;
+    saveRepo(ctx, root, meta);
+    return ok();
+  }
+
+  if (cont) return finishMerge(ctx, root, meta, tips);
+
+  if (positional.length !== 1) {
+    return fail("usage: git merge [--no-ff] <branch> | git merge --continue | git merge --abort");
+  }
+  if (meta.merge) {
+    return fail(
+      "fatal: You have not concluded your merge (MERGE_HEAD exists).\nUse git merge --continue or git merge --abort.",
+      128
+    );
+  }
+
+  const theirs = positional[0];
+  if (!(theirs in tips)) return fail(`fatal: '${theirs}' is not a mergeable branch`, 128);
+
+  const ourTip = tipOf(meta, meta.branch);
+  const theirTip = tips[theirs];
+  // Nothing to do when their work is already in our history.
+  if (!theirTip || theirTip === ourTip || isAncestor(meta, theirTip, ourTip)) return ok("Already up to date.\n");
+
+  const ourCommit = commitById(meta, ourTip);
+  const theirCommit = commitById(meta, theirTip);
+  if (!ourCommit || !theirCommit) return fail(`fatal: '${theirs}' is not a mergeable branch`, 128);
+
+  const dirty = dirtyPaths(ctx, root, meta);
+  if (dirty.length > 0) {
+    return fail(
+      `error: Your local changes to the following files would be overwritten by merge:\n` +
+        dirty.map((f) => `\t${f}`).join("\n") +
+        `\nPlease commit your changes or stash them before you merge.\nAborting`,
+      1
+    );
+  }
+
+  const defaultMessage =
+    meta.branch === "main" ? `Merge branch '${theirs}'` : `Merge branch '${theirs}' into ${meta.branch}`;
+  const mergeMessage = message && message.trim() ? message : defaultMessage;
+
+  // Strictly ahead: move the name (unless --no-ff demands a merge commit).
+  if (isAncestor(meta, ourTip, theirTip) && !noFf) {
+    tips[meta.branch] = theirTip;
+    checkoutFiles(ctx, root, meta, { ...theirCommit.files });
+    saveRepo(ctx, root, meta);
+    const stat = statBlock(ourCommit.files, theirCommit.files);
+    return ok(`Updating ${ourTip.slice(0, 7)}..${theirTip.slice(0, 7)}\nFast-forward\n${stat ? stat + "\n" : ""}`);
+  }
+
+  const base = commonAncestor(meta, ourTip, theirTip);
+  const baseFiles = base ? commitById(meta, base)?.files ?? {} : {};
+  const { files, conflicted } = mergeTrees(baseFiles, ourCommit.files, theirCommit.files, theirs);
+
+  if (conflicted.length > 0) {
+    // Apply the merge, markers and all, then wait for --continue / --abort.
+    checkoutFiles(ctx, root, meta, files);
+    meta.merge = { ours: meta.branch, theirs, base, message: mergeMessage, conflicted };
+    saveRepo(ctx, root, meta);
+    return fail(
+      conflicted.map((rel) => `Auto-merging ${rel}\n`).join("") +
+        `CONFLICT (content): Merge conflict in ${conflicted.join(", ")}\n` +
+        `Automatic merge failed; fix conflicts and then commit the result.`,
+      1
+    );
+  }
+
+  const commit = createMergeCommit(ctx, meta, mergeMessage, files, [ourTip, theirTip]);
+  checkoutFiles(ctx, root, meta, files);
+  saveRepo(ctx, root, meta);
+  const stat = statBlock(ourCommit.files, files);
+  return ok(`[${meta.branch} ${commit.id}] ${mergeMessage}\n${stat ? stat + "\n" : ""}`);
+}
+
 // ---------- dispatcher ----------
 
 export const git: CommandImpl = (ctx, args) => {
@@ -831,6 +1516,14 @@ function gitDispatch(ctx: ShellContext, args: string[]): ReturnType<CommandImpl>
       return gitRm(ctx, args.slice(1));
     case "mv":
       return gitMv(ctx, args.slice(1));
+    case "branch":
+      return gitBranch(ctx, args.slice(1));
+    case "switch":
+      return gitSwitch(ctx, args.slice(1));
+    case "checkout":
+      return gitCheckout(ctx, args.slice(1));
+    case "merge":
+      return gitMerge(ctx, args.slice(1));
     default:
       return fail(`git: '${sub}' is not a git command. See 'git --help'.`);
   }

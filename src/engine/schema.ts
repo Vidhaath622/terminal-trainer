@@ -116,6 +116,20 @@ export const cwdEqualsCheck = z.object({
   marks: z.number().nonnegative(),
 });
 
+export const branchExistsCheck = z.object({
+  type: z.literal("branchExists"),
+  /** local branch name that must exist in the current repository */
+  branch: z.string().min(1),
+  marks: z.number().nonnegative(),
+});
+
+export const onBranchCheck = z.object({
+  type: z.literal("onBranch"),
+  /** the branch HEAD must be pointing at */
+  branch: z.string().min(1),
+  marks: z.number().nonnegative(),
+});
+
 export const checkSchema = z.discriminatedUnion("type", [
   fileExistsCheck,
   dirExistsCheck,
@@ -132,6 +146,8 @@ export const checkSchema = z.discriminatedUnion("type", [
   commandUsedCheck,
   commandUsedWithFlagCheck,
   cwdEqualsCheck,
+  branchExistsCheck,
+  onBranchCheck,
 ]);
 
 export type Check = z.infer<typeof checkSchema>;

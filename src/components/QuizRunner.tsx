@@ -8,6 +8,13 @@ import { useMemo, useState } from "react";
 import { gradeQuiz, type Quiz, type StudentAnswer } from "@/roles/quiz";
 import { sanitizeQuizForStudent } from "@/roles/quiz";
 
+/** Difficulty badge colours — the same easy/medium/hard palette as the problem cards. */
+const DIFFICULTY_STYLE: Record<string, string> = {
+  easy: "border-term-green/40 text-term-green",
+  medium: "border-term-yellow/40 text-term-yellow",
+  hard: "border-term-red/40 text-term-red",
+};
+
 export default function QuizRunner({ quiz, onSubmit }: { quiz: Quiz; onSubmit?: (earned: number, max: number) => void }) {
   const clean = useMemo(() => sanitizeQuizForStudent(quiz), [quiz]);
   const [answers, setAnswers] = useState<StudentAnswer>({});
@@ -34,6 +41,13 @@ export default function QuizRunner({ quiz, onSubmit }: { quiz: Quiz; onSubmit?: 
             <p className="text-sm">
               <span className="mr-1 font-mono text-term-text/50">Q{idx + 1}.</span>
               {q.prompt} <span className="text-term-text/50">({q.marks} mk)</span>
+              {q.difficulty && (
+                <span
+                  className={`ml-1.5 inline-block rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide ${DIFFICULTY_STYLE[q.difficulty]}`}
+                >
+                  {q.difficulty}
+                </span>
+              )}
             </p>
             {q.kind === "mcq" ? (
               <div className="mt-2 space-y-1">

@@ -9,10 +9,14 @@ export const mcqOptionSchema = z.object({
   text: z.string().min(1),
 });
 
+export const questionDifficultySchema = z.enum(["easy", "medium", "hard"]);
+
 export const mcqQuestionSchema = z.object({
   kind: z.literal("mcq"),
   id: z.string().min(1),
   prompt: z.string().min(1),
+  /** easy | medium | hard, shown as a badge by QuizRunner */
+  difficulty: questionDifficultySchema.optional(),
   options: z.array(mcqOptionSchema).min(2),
   correctOptionId: z.string().min(1),
   marks: z.number().positive(),
@@ -22,6 +26,7 @@ export const shortAnswerQuestionSchema = z.object({
   kind: z.literal("short"),
   id: z.string().min(1),
   prompt: z.string().min(1),
+  difficulty: questionDifficultySchema.optional(),
   /** accepted answers, case-insensitive, trimmed */
   acceptedAnswers: z.array(z.string().min(1)).min(1),
   marks: z.number().positive(),

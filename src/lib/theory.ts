@@ -113,6 +113,23 @@ export const THEORY_TOPICS: TheoryTopic[] = [
     practiceLabel: "Practice: Your First Git Commit",
   },
   {
+    id: "git-branch-merge",
+    icon: "🔀",
+    iconColor: "text-term-blue",
+    title: "Git branching & merging",
+    summary: "main \u2192 feature \u2192 merge back: listing, creating and switching branches, merging, and cleaning up.",
+    points: [
+      "**The flow:** start on **main**, run **git switch -c <branch>** to create a work branch and land on it, commit there, then **git switch main** and **git merge <branch>** to bring the work back \u2014 main, feature, main again.",
+      "**See the branches:** **git branch** lists local branches (the one you are on is marked with *), **git branch -v** adds each branch's latest commit, **git branch -a** includes remotes, and **git log --oneline --graph --all** draws the commit graph for every branch.",
+      "**Create:** **git branch <name>** creates a branch but leaves you where you are; **git switch -c <new-branch>** creates it and moves you onto it in one step; **git checkout -b <new-branch>** is the older spelling of the same thing.",
+      "**Switch:** **git switch <branch>** moves to an existing branch, **git switch -** jumps back to the one you were on before it (Git's cd -), and **git checkout <branch>** still does the same job \u2014 switch just says what it does.",
+      "**Merge:** **git merge <branch>** merges <branch> INTO the branch you are standing on \u2014 the branch you are on is the one that moves, so check **git status** first. **git merge --no-ff <branch>** always writes a merge commit, keeping the branch visible in history even when Git could have fast-forwarded.",
+      "**Conflicts, undo and clean up:** a conflicted merge stops until you fix the files, stage them and run **git merge --continue**; **git merge --abort** throws the merge away instead. **git branch -d <branch>** deletes a merged branch safely (it refuses unmerged work), **git branch -D <branch>** forces it, and **git branch -m <old> <new>** renames a branch.",
+    ],
+    practiceHref: "/quiz",
+    practiceLabel: "Quiz: branching & merging",
+  },
+  {
     id: "pipes",
     icon: "|",
     iconColor: "text-term-blue",
@@ -144,6 +161,8 @@ export const THEORY_LINKS: Record<string, string[]> = {
   "find-redirect": ["files", "pipes"],
   "chmod-permissions": ["permissions"],
   "git-first-commit": ["git-setup", "git"],
+  "git-init-branch": ["git-branch-merge", "git", "git-setup"],
+  "git-branch-merge": ["git-branch-merge", "git", "git-setup"],
   "boss-project": ["files", "filesystem", "permissions", "pipes"],
 };
 

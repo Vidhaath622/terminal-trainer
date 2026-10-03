@@ -139,15 +139,15 @@ export default function HeroTerminal() {
           </span>
         ) : stepIndex === 0 ? (
           <>
-            Type <code className="rounded bg-term-panel px-1 font-mono text-term-green">pwd</code> and
-            press Enter
+            Press <code className="rounded bg-term-panel px-1 font-mono text-term-green">Enter</code>{" "}
+            to run <code className="rounded bg-term-panel px-1 font-mono text-term-green">pwd</code>
           </>
         ) : (
           <span>{session.currentStep.prompt}</span>
         )}
       </p>
       <div className="mt-2 h-64 sm:h-72">
-        <TerminalView session={instrumented} sessionKey={sessionKey} />
+        <TerminalView session={instrumented} sessionKey={sessionKey} initialCommand="pwd" />
       </div>
       <p
         aria-live="polite"

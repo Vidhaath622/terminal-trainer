@@ -1,5 +1,6 @@
 import SiteHeader from "@/components/SiteHeader";
 import QuizRunner from "@/components/QuizRunner";
+import { GIT_BRANCHING_QUIZ } from "@/lib/quizzes";
 
 const QUIZ = {
   id: "page-demo-quiz",
@@ -54,8 +55,13 @@ export default function QuizPage() {
           <h1 className="font-mono text-2xl font-bold">Quizzes and assignments</h1>
           <p className="mt-2 text-sm text-term-muted">Answer and submit; scoring is instant.</p>
         </header>
-        <div className="card p-6">
-          <QuizRunner quiz={QUIZ} />
+        <div className="space-y-6">
+          <div className="card p-6">
+            <QuizRunner quiz={GIT_BRANCHING_QUIZ} />
+          </div>
+          <div className="card p-6">
+            <QuizRunner quiz={QUIZ} />
+          </div>
         </div>
       </main>
     </>
