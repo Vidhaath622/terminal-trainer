@@ -1,8 +1,10 @@
 "use client";
 
 /**
- * ProblemLibrary: browsable library of problems with search and difficulty
- * filter chips (All / Easy / Medium / Hard). Each card shows the difficulty
+ * ProblemLibrary: browsable library of problems with search and a
+ * "Sort Problems" dropdown for difficulty (All / Easy / Medium / Hard). The
+ * collapsed button never shows counts -- the counts live only inside the
+ * open menu, next to each difficulty option. Each card shows the difficulty
  * badge, brief, a "first task" peek at step 1, tags, step count and total
  * marks, and links into /play/[id].
  *
@@ -10,7 +12,7 @@
  * /git-problems page does this) without duplicating card markup.
  */
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LAUNCH_PROBLEMS } from "@/problems/launch";
 import { maxMarks } from "@/engine/grader";
 import type { Problem } from "@/engine/schema";
@@ -25,9 +27,35 @@ const DIFFICULTY_STYLE: Record<Difficulty, string> = {
   hard: "text-term-red border-term-red/40 bg-term-red/10",
 };
 
+/** Text colour for a difficulty label inside the sort menu. */
+const DIFFICULTY_TEXT: Record<Difficulty, string> = {
+  easy: "text-term-green",
+  medium: "text-term-yellow",
+  hard: "text-term-red",
+};
+
 export default function ProblemLibrary({ problems = LAUNCH_PROBLEMS }: { problems?: Problem[] }) {
   const [query, setQuery] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty | "All">("All");
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortRef = useRef<HTMLDivElement>(null);
+
+  // Close the sort menu on outside click or Escape.
+  useEffect(() => {
+    if (!sortOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) setSortOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSortOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [sortOpen]);
 
   const counts = useMemo(() => {
     const c: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
@@ -62,21 +90,59 @@ export default function ProblemLibrary({ problems = LAUNCH_PROBLEMS }: { problem
             className="w-full rounded border border-term-border bg-term-panel px-3 py-2 font-mono text-sm text-term-text placeholder:text-term-muted/60 focus:border-term-green/60 focus:outline-none sm:w-64"
           />
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {(["All", ...DIFFICULTY_ORDER] as const).map((d) => (
-            <button
-              key={d}
-              onClick={() => setDifficulty(d)}
-              className={`rounded border px-3 py-1 font-mono text-xs font-medium capitalize ${
-                difficulty === d
-                  ? "border-term-green/50 bg-term-green/15 text-term-green"
-                  : "border-term-border bg-term-panel text-term-muted hover:text-term-text"
-              }`}
-              data-testid={`problem-chip-${d.toLowerCase()}`}
+        {/* Sort dropdown: counts live only inside the open menu */}
+        <div className="relative self-start sm:self-auto" ref={sortRef}>
+          <button
+            type="button"
+            onClick={() => setSortOpen((o) => !o)}
+            aria-haspopup="menu"
+            aria-expanded={sortOpen}
+            data-testid="problem-sort-toggle"
+            className={`flex items-center gap-2 rounded border px-3 py-2 font-mono text-xs font-medium capitalize transition-colors ${
+              difficulty === "All"
+                ? "border-term-border bg-term-panel text-term-muted hover:text-term-text"
+                : "border-term-green/50 bg-term-green/15 text-term-green"
+            }`}
+          >
+            Sort Problems
+            {difficulty !== "All" && <span className="text-term-green/90">· {difficulty}</span>}
+            <span aria-hidden="true" className={`text-[10px] leading-none transition-transform ${sortOpen ? "rotate-180" : ""}`}>
+              ▼
+            </span>
+          </button>
+
+          {sortOpen && (
+            <div
+              role="menu"
+              aria-label="Sort problems by difficulty"
+              data-testid="problem-sort-menu"
+              className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded border border-term-border bg-term-panel py-1 shadow-lg"
             >
-              {d === "All" ? `All (${problems.length})` : `${d} (${counts[d]})`}
-            </button>
-          ))}
+              {(["All", ...DIFFICULTY_ORDER] as const).map((d) => {
+                const active = difficulty === d;
+                const count = d === "All" ? problems.length : counts[d];
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={active}
+                    onClick={() => {
+                      setDifficulty(d);
+                      setSortOpen(false);
+                    }}
+                    data-testid={`problem-chip-${d.toLowerCase()}`}
+                    className={`flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left font-mono text-xs capitalize transition-colors ${
+                      active ? "bg-term-green/15" : "text-term-text hover:bg-term-green/10"
+                    }`}
+                  >
+                    <span className={active ? "text-term-green" : d === "All" ? "text-term-text" : DIFFICULTY_TEXT[d]}>{d}</span>
+                    <span className={active ? "text-term-green" : "text-term-muted"}>({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
